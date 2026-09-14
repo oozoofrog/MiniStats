@@ -1,8 +1,19 @@
 .PHONY: help doctor verify debug run install test-python
+
+DIR ?= $(HOME)/Applications
+
 .DEFAULT_GOAL := help
 
 help:
-	@printf '%s\n' 'make doctor       Check local macOS build tools and inputs' 'make verify       Release build, existing tests, bundle checks; save log' 'make debug        Debug build, existing tests, bundle checks; save log' 'make run          Stop any running app, build, then launch build/MiniStats.app' 'make install      Build then install to ~/Applications (or make install DIR=/Applications)' 'make test-python  Cleaner regression tests in temporary directories'
+	@printf '%s\n' \
+		'make doctor                    Check local macOS build tools and inputs' \
+		'make verify                    Release build, existing tests, bundle checks; save log' \
+		'make debug                     Debug build, existing tests, bundle checks; save log' \
+		'make run                       Build, install to ~/Applications, then launch' \
+		'make run DIR=/Applications     Build, install to /Applications, then launch' \
+		'make install                   Build then install to ~/Applications' \
+		'make install DIR=/Applications Build then install to /Applications' \
+		'make test-python               Cleaner regression tests in temporary directories'
 
 doctor:
 	@./scripts/doctor.sh
@@ -14,7 +25,7 @@ debug:
 	@./scripts/verify.sh --debug
 
 run:
-	@./scripts/run.sh
+	@DIR="$(DIR)" ./scripts/run.sh
 
 install:
 	@./scripts/install.sh "$(DIR)"
