@@ -360,6 +360,7 @@ struct DashboardView: View {
         .font(.pixel(13))
         .frame(width: 400, height: 600)
         .background(LCDGlassBackground())
+        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .onChange(of: candidatePaths) { _, newPaths in
             selection.formIntersection(newPaths)
         }
@@ -575,10 +576,14 @@ struct DashboardView: View {
 }
 
 final class SolidDashboardSurface: NSView {
-    override var isOpaque: Bool { true }
+    override var isOpaque: Bool { false }
     override func draw(_ dirtyRect: NSRect) {
         NSColor.windowBackgroundColor.setFill()
-        dirtyRect.fill()
+        NSBezierPath(
+            roundedRect: bounds,
+            xRadius: 20,
+            yRadius: 20
+        ).fill()
     }
     override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -601,6 +606,15 @@ final class DashboardSurfaceController: NSViewController {
 
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 600))
+        view.wantsLayer = true
+        view.layer?.backgroundColor = NSColor.clear.cgColor
+
+        host.wantsLayer = true
+        host.layer?.backgroundColor = NSColor.clear.cgColor
+        host.layer?.cornerRadius = 20
+        host.layer?.cornerCurve = .continuous
+        host.layer?.masksToBounds = true
+
         installSurface()
         observer = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
