@@ -11,11 +11,14 @@ import QuartzCore
 
 final class TransparentPopover {
     
-    private let glassController = GlassViewController()
-    
     var contentViewController: NSViewController? {
         didSet {
-            glassController.setContentViewController(contentViewController)
+            panel.contentViewController = contentViewController
+            
+            if let view = contentViewController?.view {
+                view.wantsLayer = true
+                view.layer?.backgroundColor = NSColor.clear.cgColor
+            }
         }
     }
     
@@ -79,18 +82,6 @@ final class TransparentPopover {
         )
         
         configurePanel()
-        
-        glassController.loadView()
-
-        glassController.glassView.style = .regular
-        glassController.glassView.cornerRadius = 24
-        glassController.glassView.tintColor = nil
-
-        if #available(macOS 27.0, *) {
-            glassController.glassView.effectIsInteractive = false
-        }
-
-        panel.contentViewController = glassController
     }
     
     deinit {
@@ -355,7 +346,7 @@ final class TransparentPopover {
     private func updateTransientTracking() {
         removeTransientTracking()
 
-        guard state != .hidden else {
+        guard state == .hidden else {
             return
         }
 
@@ -522,31 +513,5 @@ private extension NSRect {
         }
 
         return width * height
-    }
-}
-
-private final class GlassViewController: NSViewController {
-    let glassView = NSGlassEffectView()
-
-    private var childController: NSViewController?
-
-    override func loadView() {
-        view = glassView
-    }
-
-    func setContentViewController(_ controller: NSViewController?) {
-        if let old = childController {
-            old.removeFromParent()
-        }
-
-        childController = controller
-
-        guard let controller else {
-            glassView.contentView = nil
-            return
-        }
-
-        addChild(controller)
-        glassView.contentView = controller.view
     }
 }

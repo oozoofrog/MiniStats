@@ -32,7 +32,8 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | 작업 | 먼저 볼 파일과 심볼 |
 | --- | --- |
 | CPU·메모리·네트워크 계산, 프로세스 순위 | `main.swift`: `cpuLoad`, `memoryUsage`, `topCPU`, `parseNetwork`, `networkRate` |
-| 메뉴바·팝오버·자동 실행 | `main.swift`: `AppDelegate`, `StatusReadout` |
+| 메뉴바·자동 실행 | `main.swift`: `AppDelegate`, `StatusReadout` |
+| 투명 팝오버 패널 | `Popover.swift`: `TransparentPopover` |
 | 디스크 경고·알림·정리 확인·Python 실행 | `Storage.swift`: `DiskUsage`, `CacheReport`, `StorageController` |
 | DerivedData 조회·삭제 보호 | `deriveddata.py`: `inspect`, `eligible`, `ensure_idle`, `clean`, `main` |
 | 대시보드·상위 프로세스·스토리지 선택 UI | `Dashboard.swift`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
@@ -40,7 +41,7 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | 삭제·보존·동시 작업 회귀 검사 | `tests/test_deriveddata.py` |
 | 타깃·프레임워크·패키징 | `build.sh`, `Info.plist`, `Bridging.h`, `assets/AppIcon.png` |
 
-새 Swift 파일을 추가하면 `build.sh`의 컴파일 입력에도 추가한다. 현재 빌드는 `arm64-apple-macos13.0`이며 AppKit, SwiftUI(자동 링크), IOKit, ServiceManagement, UserNotifications를 링크한다. 번들 식별자는 `Info.plist`의 `local.jay.MiniStats`다. 이름에 사용자 문자열이 있어도 단순 환경 정리 과정에서 변경하지 않는다. 기존 알림·로그인 항목과 연결될 수 있다.
+새 Swift 파일을 추가하면 `build.sh`의 컴파일 입력에도 추가한다. 현재 빌드는 `arm64-apple-macos26.0`이며 AppKit, SwiftUI(자동 링크), IOKit, ServiceManagement, UserNotifications를 링크한다. 번들 식별자는 `Info.plist`의 `local.jay.MiniStats`다. 이름에 사용자 문자열이 있어도 단순 환경 정리 과정에서 변경하지 않는다. 기존 알림·로그인 항목과 연결될 수 있다.
 
 ## GUI와 설치 검증
 
@@ -89,5 +90,5 @@ Git 저장소가 없는 폴더에서도 빌드·검증·루트의 프로젝트 �
 - `--show-dashboard`와 `--show-storage`는 시작할 화면을 지정한다. macOS 상태 메뉴가 준비되기 전 표시가 되지 않으면 메뉴바 아이콘을 클릭한다.
 - `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드의 다섯 화면을 PNG로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. SwiftUI 콘텐츠 배치 검사이며, 실제 유리 효과 합성과 마우스 조작 검증을 대신하지 않는다.
 - `--diagnostics-output <절대 로그 경로>`는 프로세스 조회 수와 실패 코드를 기록하는 선택적 진단 인수다. 평소 실행에는 필요 없다.
-- SourceKit-LSP가 직접 `swiftc`로 묶는 파일들의 빌드 설정을 읽지 못하면 다른 파일의 심볼을 찾지 못하는 진단이 나올 수 있다. 컴파일 판정은 세 파일을 함께 빌드하는 `make verify` 결과를 따른다.
+- SourceKit-LSP가 직접 `swiftc`로 묶는 파일들의 빌드 설정을 읽지 못하면 다른 파일의 심볼을 찾지 못하는 진단이 나올 수 있다. 컴파일 판정은 네 Swift 파일을 함께 빌드하는 `make verify` 결과를 따른다.
 - 정리 도구의 `--only-path PATH`는 기본/명시된 조회 루트에서 발견된 정리 후보를 좁히는 허용 목록이다. `--clean`과 함께 반복해서 전달할 수 있으며, 새 삭제 루트를 추가하지 않는다. 선택 중 하나라도 후보와 일치하지 않으면 삭제를 시작하지 않는다.

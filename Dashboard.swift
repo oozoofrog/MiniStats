@@ -584,7 +584,7 @@ final class SolidDashboardSurface: NSView {
     }
 }
 
-/// The glass owns a single hosting content view. Older systems use the system material.
+/// The Liquid Glass surface owns a single hosting content view; reduced transparency uses a solid surface.
 final class DashboardSurfaceController: NSViewController {
     private let model: DashboardModel
     private var observer: NSObjectProtocol?
@@ -602,19 +602,12 @@ final class DashboardSurfaceController: NSViewController {
         if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
             surface = SolidDashboardSurface()
             surface.addSubview(host)
-        } else if #available(macOS 26.0, *) {
+        } else {
             let glass = NSGlassEffectView()
             glass.style = .regular
             glass.cornerRadius = 20
             glass.contentView = host
             surface = glass
-        } else {
-            let effect = NSVisualEffectView()
-            effect.material = .popover
-            effect.blendingMode = .behindWindow
-            effect.state = .active
-            effect.addSubview(host)
-            surface = effect
         }
         view.addSubview(surface)
         surface.frame = view.bounds

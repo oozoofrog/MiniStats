@@ -10,7 +10,7 @@ Apple Silicon용 네이티브 macOS 앱입니다.
 
 ## 설치
 
-Apple Silicon, macOS 13 이상에서 한 줄 설치:
+Apple Silicon, macOS 26 이상에서 한 줄 설치:
 
 ```sh
 curl -fsSL https://raw.githubusercontent.com/oozoofrog/MiniStats/main/scripts/install.sh | sh
@@ -25,11 +25,11 @@ curl -fsSL https://raw.githubusercontent.com/oozoofrog/MiniStats/main/scripts/in
 - **DerivedData 정리:** 오래된 캐시를 선택해 정리
 - **macOS 연동:** 로그인 시 자동 실행, 스토리지 알림, 활성 상태 보기·Finder 바로가기
 
-macOS 26 이상에서는 네이티브 유리 효과를 사용합니다.
+macOS 26 이상에서 네이티브 Liquid Glass(`NSGlassEffectView`)를 사용합니다.
 
 ## 빌드와 실행
 
-- 실행: Apple Silicon, macOS 13 이상, `/usr/bin/python3`
+- 실행: Apple Silicon, macOS 26 이상, `/usr/bin/python3`
 - 빌드: macOS 26 SDK 이상을 포함한 Xcode 또는 Command Line Tools
 
 ```sh

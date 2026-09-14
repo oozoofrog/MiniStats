@@ -1,6 +1,6 @@
 # MiniStats 개발 지침
 
-Apple Silicon / macOS 13+ 메뉴바 앱. AppKit·SwiftUI Swift 세 파일을 `swiftc`로 직접 빌드한다. 외부 패키지, Xcode 프로젝트, Swift Package는 없다.
+Apple Silicon / macOS 26+ 메뉴바 앱. AppKit·SwiftUI Swift 네 파일을 `swiftc`로 직접 빌드한다. 외부 패키지, Xcode 프로젝트, Swift Package는 없다.
 
 ## 작업 시작
 
