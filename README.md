@@ -8,6 +8,16 @@
 
 Apple Silicon용 네이티브 macOS 앱입니다.
 
+## 설치
+
+Apple Silicon, macOS 13 이상에서 한 줄 설치:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/oozoofrog/MiniStats/main/scripts/install.sh | sh
+```
+
+기본 설치 경로는 `~/Applications/MiniStats.app`이다. 설치 스크립트가 저장소를 클론하고 빌드·자체 검사를 거쳐 앱을 복사한다. 소스에서 직접 빌드하므로 공증(notarization)은 되어 있지 않다. 첫 실행 시 Gatekeeper 경고가 나면 앱을 우클릭하고 "열기"를 선택한다.
+
 ## 주요 기능
 
 - **대시보드:** CPU·메모리 실시간 그래프와 네트워크·스토리지·배터리 상태

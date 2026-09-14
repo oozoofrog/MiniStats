@@ -1,8 +1,8 @@
-.PHONY: help doctor verify debug run test-python
+.PHONY: help doctor verify debug run install test-python
 .DEFAULT_GOAL := help
 
 help:
-	@printf '%s\n' 'make doctor       Check local macOS build tools and inputs' 'make verify       Release build, existing tests, bundle checks; save log' 'make debug        Debug build, existing tests, bundle checks; save log' 'make run          Stop any running app, build, then launch build/MiniStats.app' 'make test-python  Cleaner regression tests in temporary directories'
+	@printf '%s\n' 'make doctor       Check local macOS build tools and inputs' 'make verify       Release build, existing tests, bundle checks; save log' 'make debug        Debug build, existing tests, bundle checks; save log' 'make run          Stop any running app, build, then launch build/MiniStats.app' 'make install      Build then install to ~/Applications (or make install DIR=/Applications)' 'make test-python  Cleaner regression tests in temporary directories'
 
 doctor:
 	@./scripts/doctor.sh
@@ -15,6 +15,9 @@ debug:
 
 run:
 	@./scripts/run.sh
+
+install:
+	@./scripts/install.sh "$(DIR)"
 
 test-python:
 	@/usr/bin/python3 tests/test_deriveddata.py
