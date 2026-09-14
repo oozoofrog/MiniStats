@@ -204,22 +204,102 @@ struct PixelGear: View {
     }
 }
 
-/// Inset screen surface with a scanline tint, framing hero numerals like an LCD panel.
+/// Fine pixel grid that mimics the subpixel matrix of an LCD panel.
+struct LCDPixelGrid: View {
+    var opacity: Double = 0.06
+    var pitch: CGFloat = 3
+    var body: some View {
+        Canvas { ctx, size in
+            let ink = Color.white.opacity(opacity)
+            var x = pitch
+            while x < size.width {
+                ctx.fill(Path(CGRect(x: x, y: 0, width: 0.5, height: size.height)), with: .color(ink))
+                x += pitch
+            }
+            var y = pitch
+            while y < size.height {
+                ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 0.5)), with: .color(ink))
+                y += pitch
+            }
+        }
+    }
+}
+
+/// Horizontal scanlines that mimic the row gaps of an LCD panel.
+struct LCDScanlines: View {
+    var opacity: Double = 0.05
+    var spacing: CGFloat = 3
+    var body: some View {
+        Canvas { ctx, size in
+            let ink = Color.white.opacity(opacity)
+            var y = 0.0
+            while y < size.height {
+                ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(ink))
+                y += spacing
+            }
+        }
+    }
+}
+
+/// Diagonal glare suggesting the glass cover of a real LCD.
+struct LCDGlare: View {
+    var body: some View {
+        LinearGradient(
+            colors: [Color.white.opacity(0.07), .clear, Color.white.opacity(0.02)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
+    }
+}
+
+/// Translucent liquid-glass substrate for the main popover background: a faint tint over the window glass, with a pixel grid, scanlines and glare so the whole surface reads as one LCD panel.
+struct LCDGlassBackground: View {
+    var body: some View {
+        ZStack {
+            Color.primary.opacity(0.04)
+            LCDPixelGrid(opacity: 0.03, pitch: 4)
+            LCDScanlines(opacity: 0.018, spacing: 4)
+            LCDGlare()
+        }
+        .allowsHitTesting(false)
+    }
+}
+
+/// Translucent LCD sub-panel background for cards: a faint tint plus a pixel grid and a hairline border.
+struct LCDPanelBackground: ViewModifier {
+    var cornerRadius: CGFloat
+    var tint: Double
+    var grid: Double
+    func body(content: Content) -> some View {
+        content.background(
+            ZStack {
+                Color.primary.opacity(tint)
+                LCDPixelGrid(opacity: grid, pitch: 4)
+            }
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+        )
+        .overlay(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).stroke(Color.primary.opacity(0.08), lineWidth: 1))
+    }
+}
+
+extension View {
+    /// Translucent LCD-style panel background for cards and surfaces.
+    func lcdPanel(cornerRadius: CGFloat = 14, tint: Double = 0.05, grid: Double = 0.03) -> some View {
+        modifier(LCDPanelBackground(cornerRadius: cornerRadius, tint: tint, grid: grid))
+    }
+}
+
+/// Translucent LCD panel: a dark substrate that lets the window glass bleed through, with a pixel grid, scanlines and glare framing hero numerals.
 struct LCDScreen<Content: View>: View {
     @ViewBuilder var content: () -> Content
     var body: some View {
         content().padding(10)
             .background(
                 ZStack {
-                    Color(red: 0.07, green: 0.08, blue: 0.09)
-                    // scanlines
-                    Canvas { ctx, size in
-                        var y = 0.0
-                        while y < size.height {
-                            ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.white.opacity(0.05)))
-                            y += 3
-                        }
-                    }
+                    Color.black.opacity(0.55)
+                    LCDPixelGrid(opacity: 0.07)
+                    LCDScanlines(opacity: 0.05)
+                    LCDGlare()
                 }
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -279,6 +359,7 @@ struct DashboardView: View {
         }
         .font(.pixel(13))
         .frame(width: 400, height: 600)
+        .background(LCDGlassBackground())
         .onChange(of: candidatePaths) { selection.formIntersection($0) }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.page)
     }
@@ -323,7 +404,7 @@ struct DashboardView: View {
                         if let report = storage?.report { Text("정리 후보 \(bytes(UInt64(report.candidateBytes)))") }
                         else { Text(storage?.busy == true ? "조회 중…" : "후보 확인") }
                     }.font(.pixel(10)).foregroundStyle(.secondary)
-                }.padding(14).background(ink.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+                }.padding(14).lcdPanel(cornerRadius: 14)
             }.buttonStyle(.plain).accessibilityRepresentation { Button("스토리지 정리 열기") { model.page = .storage } }
             HStack {
                 Text(model.battery).font(.pixel(11)).foregroundStyle(.secondary)
@@ -602,7 +683,15 @@ func dashboardSelfTest() {
             model.page = page
             model.order = order
             let content = DashboardView(model: model, renderOnly: true).environment(\.colorScheme, scheme)
-                .background(scheme == .dark ? Color(red: 0.12, green: 0.13, blue: 0.15) : Color(red: 0.97, green: 0.98, blue: 0.99))
+                .background(
+                    LinearGradient(
+                        colors: scheme == .dark
+                            ? [Color(red: 0.11, green: 0.12, blue: 0.14), Color(red: 0.09, green: 0.10, blue: 0.12)]
+                            : [Color(red: 0.96, green: 0.97, blue: 0.98), Color(red: 0.93, green: 0.94, blue: 0.96)],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                )
             let renderer = ImageRenderer(content: content)
             renderer.scale = 2
             guard let cgImage = renderer.cgImage else { throw CocoaError(.fileWriteUnknown) }
