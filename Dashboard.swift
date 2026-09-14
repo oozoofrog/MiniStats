@@ -360,7 +360,9 @@ struct DashboardView: View {
         .font(.pixel(13))
         .frame(width: 400, height: 600)
         .background(LCDGlassBackground())
-        .onChange(of: candidatePaths) { selection.formIntersection($0) }
+        .onChange(of: candidatePaths) { _, newPaths in
+            selection.formIntersection(newPaths)
+        }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.page)
     }
     private var pageContents: some View {
