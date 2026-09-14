@@ -116,7 +116,7 @@ final class TransparentPopover {
         of positioningView: NSView,
         preferredEdge: NSRectEdge
     ) {
-        guard state != .hidden else {
+        guard state == .hidden else {
             return
         }
         
