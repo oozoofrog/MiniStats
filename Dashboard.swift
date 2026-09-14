@@ -242,28 +242,28 @@ struct LCDScanlines: View {
 }
 
 /// Diagonal glare suggesting the glass cover of a real LCD.
-struct LCDGlare: View {
-    var body: some View {
-        LinearGradient(
-            colors: [Color.white.opacity(0.07), .clear, Color.white.opacity(0.02)],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-}
+//struct LCDGlare: View {
+//    var body: some View {
+//        LinearGradient(
+//            colors: [Color.white.opacity(0.07), .clear, Color.white.opacity(0.02)],
+//            startPoint: .topLeading,
+//            endPoint: .bottomTrailing
+//        )
+//    }
+//}
 
 /// Translucent liquid-glass substrate for the main popover background: a faint tint over the window glass, with a pixel grid, scanlines and glare so the whole surface reads as one LCD panel.
-struct LCDGlassBackground: View {
-    var body: some View {
-        ZStack {
-            Color.primary.opacity(0.04)
-            LCDPixelGrid(opacity: 0.03, pitch: 4)
-            LCDScanlines(opacity: 0.018, spacing: 4)
-            LCDGlare()
-        }
-        .allowsHitTesting(false)
-    }
-}
+//struct LCDGlassBackground: View {
+//    var body: some View {
+//        ZStack {
+////            Color.primary.opacity(0.04)
+//            LCDPixelGrid(opacity: 0.03, pitch: 4)
+//            LCDScanlines(opacity: 0.018, spacing: 4)
+//            LCDGlare()
+//        }
+//        .allowsHitTesting(false)
+//    }
+//}
 
 /// Translucent LCD sub-panel background for cards: a faint tint plus a pixel grid and a hairline border.
 struct LCDPanelBackground: ViewModifier {
@@ -299,7 +299,7 @@ struct LCDScreen<Content: View>: View {
                     Color.black.opacity(0.55)
                     LCDPixelGrid(opacity: 0.07)
                     LCDScanlines(opacity: 0.05)
-                    LCDGlare()
+//                    LCDGlare()
                 }
             )
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -359,7 +359,7 @@ struct DashboardView: View {
         }
         .font(.pixel(13))
         .frame(width: 400, height: 600)
-        .background(LCDGlassBackground())
+//        .background(LCDGlassBackground())
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .onChange(of: candidatePaths) { _, newPaths in
             selection.formIntersection(newPaths)
@@ -640,6 +640,7 @@ final class DashboardSurfaceController: NSViewController {
             let glass = NSGlassEffectView()
             glass.style = .regular
             glass.cornerRadius = 20
+            glass.clipsToBounds = true
             if #available(macOS 27.0, *) {
                 glass.effectIsInteractive = true
             }
