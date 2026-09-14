@@ -1,7 +1,27 @@
 import AppKit
+import CoreText
 import Darwin
 import IOKit.ps
 import ServiceManagement
+
+@discardableResult
+func registerEmbeddedFonts() -> Bool {
+    var allRegistered = true
+    for name in ["NeoDunggeunmo"] {
+        guard let url = Bundle.main.url(forResource: name, withExtension: "woff", subdirectory: "Fonts") ?? Bundle.main.url(forResource: name, withExtension: "woff") else {
+            diagnostic("Font not found in bundle: \(name).woff")
+            allRegistered = false
+            continue
+        }
+        var error: Unmanaged<CFError>?
+        if !CTFontManagerRegisterFontsForURL(url as CFURL, .process, &error) {
+            let reason = error?.takeRetainedValue().localizedDescription ?? "unknown error"
+            diagnostic("Font registration failed for \(name): \(reason)")
+            allRegistered = false
+        }
+    }
+    return allRegistered
+}
 
 func diagnostic(_ message: String) {
     guard let index = CommandLine.arguments.firstIndex(of: "--diagnostics-output"), CommandLine.arguments.count > index + 1 else { return }
@@ -234,6 +254,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var previousTime = ProcessInfo.processInfo.systemUptime
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        registerEmbeddedFonts()
         status.autosaveName = "MiniStats"
         readout.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
         readout.alignment = .center
@@ -381,6 +402,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 }
 
 func selfTest() {
+    precondition(registerEmbeddedFonts(), "Embedded font registration failed")
+    let resolvedFont = CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes([
+        kCTFontNameAttribute: "NeoDunggeunmo-Regular",
+        kCTFontSizeAttribute: 12
+    ] as CFDictionary), 12, nil)
+    precondition(CTFontCopyPostScriptName(resolvedFont) as String == "NeoDunggeunmo-Regular", "NeoDunggeunmo did not resolve after registration")
     precondition(cpuLoad([0, 0, 0, 0], [20, 10, 70, 0])?.total == 30)
     precondition(cpuLoad([0, 0, 0, 0], [20, 10, 70, 0])?.system == 10)
     precondition(cpuLoad([1, 1, 1, 1], [1, 1, 1, 1]) == nil)
@@ -420,7 +447,7 @@ func selfTest() {
     guard let cpu = cpuLoad(ticks, cpuTicks()!), (0...100).contains(cpu.total) else { fatalError("Live CPU delta failed") }
     let live = topCPU(processes, processSamples(), seconds: 3)
     precondition(live.allSatisfy { $0.percent >= 0 && $0.percent <= 100 * Double(ProcessInfo.processInfo.activeProcessorCount) })
-    print("PASS: CPU math/wraparound, memory bounds, network parser/rates/reset/64-bit counters, process ranking/pid reuse, sysctl reads, formatting, live sampling")
+    print("PASS: embedded font registration and resolution, CPU math/wraparound, memory bounds, network parser/rates/reset/64-bit counters, process ranking/pid reuse, sysctl reads, formatting, live sampling")
     print("CPU \(String(format: "%.1f", cpu.total))% · Memory \(bytes(memory.used))/\(bytes(totalMemory)) · \(swapText()) · \(memoryPressureText()) · \(loadAverageText()) · Interfaces \(network.keys.sorted()) · \(batteryText())")
     print("Processes \(processes.count) · top CPU \(live.map { "\($0.name) \(String(format: "%.1f", $0.percent))%" }) · top memory \(topMemory(processes).map { "\($0.name) \(bytes($0.memory))" })")
 }
@@ -430,6 +457,7 @@ if CommandLine.arguments.contains("--self-test") {
     try storageSelfTest()
     dashboardSelfTest()
 } else if let index = CommandLine.arguments.firstIndex(of: "--render-dashboard"), CommandLine.arguments.count > index + 1 {
+    registerEmbeddedFonts()
     try MainActor.assumeIsolated { try renderDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
 } else if CommandLine.arguments.contains("--notification-status") {
     printNotificationStatus()

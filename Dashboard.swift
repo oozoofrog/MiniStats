@@ -123,33 +123,107 @@ final class DashboardModel: ObservableObject {
     }
 }
 
+extension Font {
+    static func pixel(_ size: CGFloat) -> Font { .custom("NeoDunggeunmo", size: size) }
+}
+
+/// Column histogram rendered as 1-bit pixel bars; replaces the stroked line.
 struct HistoryLine: View {
     let values: [Double]
     let color: Color
     var body: some View {
         GeometryReader { geometry in
-            Path { path in
-                guard values.count > 1 else { return }
-                for (index, value) in values.enumerated() {
-                    let point = CGPoint(x: geometry.size.width * Double(index) / Double(values.count - 1),
-                                        y: geometry.size.height * (1 - min(max(value, 0), 100) / 100))
-                    if index == 0 { path.move(to: point) } else { path.addLine(to: point) }
+            HStack(alignment: .bottom, spacing: 1) {
+                ForEach(Array(values.enumerated()), id: \.offset) { _, value in
+                    let h = max(2, min(100, value) / 100 * geometry.size.height)
+                    Rectangle().fill(color).frame(height: h)
                 }
-            }.stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-        }.frame(height: 38).accessibilityHidden(true)
+            }
+        }.frame(height: 34).accessibilityHidden(true)
     }
 }
 
+/// Segmented 1-bit usage meter; filled cells use the ink color, and warning cells use a dither pattern instead of an accent color.
 struct UsageBar: View {
     let percent: Double
     let color: Color
+    var warning = false
+    private let cells = 24
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .leading) {
-                Capsule().fill(.primary.opacity(0.08))
-                Capsule().fill(color).frame(width: geometry.size.width * min(max(percent, 0), 100) / 100)
+        GeometryReader { _ in
+            HStack(spacing: 1) {
+                ForEach(0..<cells, id: \.self) { i in
+                    let on = Double(i) < percent / 100 * Double(cells)
+                    if on && warning { DitherCell() }
+                    else { RoundedRectangle(cornerRadius: 1, style: .continuous).fill(on ? color : color.opacity(0.08)) }
+                }
             }
-        }.frame(height: 5).accessibilityLabel("사용률").accessibilityValue(String(format: "%.0f%%", percent))
+        }.frame(height: 10).accessibilityLabel("사용률").accessibilityValue(String(format: "%.0f%%", percent))
+    }
+}
+
+/// 2x2 checkerboard cell so a "filled" warning segment stays black-and-white.
+struct DitherCell: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let w = size.width / 2, h = size.height / 2
+            ctx.fill(Path(CGRect(x: 0, y: 0, width: w, height: h)), with: .color(.primary))
+            ctx.fill(Path(CGRect(x: w, y: h, width: w, height: h)), with: .color(.primary))
+        }
+    }
+}
+
+/// Pixel-art gear drawn as 1x1 cells on a 16x16 grid, replacing the vector SF Symbol.
+struct PixelGear: View {
+    var size: CGFloat = 16
+    var body: some View {
+        Canvas { ctx, sz in
+            let N = 16.0
+            let scale = sz.width / N
+            let cx = (N - 1) / 2, cy = (N - 1) / 2
+            let Rout = 7.2, Rring = 4.6, Rhole = 1.9
+            let teeth = 8, half = 16.0 * .pi / 180
+            var path = Path()
+            for j in 0..<Int(N) {
+                for i in 0..<Int(N) {
+                    let dx = Double(i) - cx, dy = Double(j) - cy
+                    let r = (dx * dx + dy * dy).squareRoot()
+                    let ang = atan2(dy, dx)
+                    var onTooth = false
+                    for k in 0..<teeth {
+                        let a = Double(k) * 2 * .pi / Double(teeth)
+                        let d = abs((ang - a + .pi).truncatingRemainder(dividingBy: 2 * .pi) - .pi)
+                        if d < half { onTooth = true; break }
+                    }
+                    let filled = (r > Rhole && r <= Rout) && (r <= Rring || onTooth)
+                    if filled { path.addRect(CGRect(x: Double(i) * scale, y: Double(j) * scale, width: scale, height: scale)) }
+                }
+            }
+            ctx.fill(path, with: .color(.primary))
+        }.frame(width: size, height: size).accessibilityHidden(true)
+    }
+}
+
+/// Inset screen surface with a scanline tint, framing hero numerals like an LCD panel.
+struct LCDScreen<Content: View>: View {
+    @ViewBuilder var content: () -> Content
+    var body: some View {
+        content().padding(10)
+            .background(
+                ZStack {
+                    Color(red: 0.07, green: 0.08, blue: 0.09)
+                    // scanlines
+                    Canvas { ctx, size in
+                        var y = 0.0
+                        while y < size.height {
+                            ctx.fill(Path(CGRect(x: 0, y: y, width: size.width, height: 1)), with: .color(.white.opacity(0.05)))
+                            y += 3
+                        }
+                    }
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous).stroke(Color.primary.opacity(0.15), lineWidth: 1))
     }
 }
 
@@ -158,8 +232,7 @@ struct DashboardView: View {
     var renderOnly = false
     @State private var selection: Set<String> = []
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    private let blue = Color.accentColor
-    private let purple = Color.purple
+    private let ink = Color.primary
     private var storage: StorageController? { model.storage }
     private var selectedEntries: [CacheEntry] { storage?.report?.candidates.filter { selection.contains($0.path) } ?? [] }
     private var candidatePaths: [String] { storage?.report?.candidates.map(\.path) ?? [] }
@@ -175,18 +248,18 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 if model.page != .overview {
-                    Button { model.page = .overview } label: { Image(systemName: "chevron.left").frame(width: 24, height: 24) }
+                    Button { model.page = .overview } label: { Image(systemName: "chevron.left").font(.pixel(16)).frame(width: 24, height: 24) }
                         .buttonStyle(.plain).help("대시보드로 돌아가기").accessibilityLabel("대시보드로 돌아가기")
                 } else {
-                    Image(systemName: "waveform.path").foregroundStyle(blue).font(.system(size: 19, weight: .semibold))
+                    Image(systemName: "waveform.path").foregroundStyle(ink).font(.system(size: 19, weight: .semibold))
                 }
-                Text(title).font(.system(size: 18, weight: .semibold))
+                Text(title).font(.pixel(18))
                 Spacer()
                 if model.page == .overview {
-                    Text("실시간").font(.caption).foregroundStyle(.secondary)
-                    Circle().fill(Color.green).frame(width: 5, height: 5).accessibilityHidden(true)
+                    Text("실시간").font(.pixel(12)).foregroundStyle(.secondary)
+                    Circle().fill(ink).frame(width: 5, height: 5).accessibilityHidden(true)
                 }
-                Button { model.refreshContext(); model.page = .settings } label: { Image(systemName: "gearshape").frame(width: 26, height: 26) }
+                Button { model.refreshContext(); model.page = .settings } label: { PixelGear(size: 18).foregroundStyle(ink).frame(width: 26, height: 26) }
                     .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
             }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 16)
             if renderOnly {
@@ -199,11 +272,12 @@ struct DashboardView: View {
             if model.page == .storage { storageActionBar.padding(.horizontal, 22).padding(.vertical, 12) }
             Divider().opacity(0.5)
             HStack {
-                Text("\(ProcessInfo.processInfo.activeProcessorCount)코어 · \(bytes(totalMemory))").lineLimit(1)
+                Text("\(ProcessInfo.processInfo.activeProcessorCount)코어 · \(bytes(totalMemory))").font(.pixel(11)).lineLimit(1)
                 Spacer()
-                Text("3초마다 갱신")
-            }.font(.system(size: 10)).foregroundStyle(.secondary).padding(.horizontal, 22).padding(.vertical, 12)
+                Text("3초마다 갱신").font(.pixel(11))
+            }.foregroundStyle(.secondary).padding(.horizontal, 22).padding(.vertical, 12)
         }
+        .font(.pixel(13))
         .frame(width: 400, height: 600)
         .onChange(of: candidatePaths) { selection.formIntersection($0) }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.page)
@@ -221,69 +295,73 @@ struct DashboardView: View {
     private var overview: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 20) {
-                metric(order: .cpu, value: model.cpu?.total, subtitle: "전체 코어 사용률", history: model.cpuHistory, color: blue)
-                Rectangle().fill(.primary.opacity(0.08)).frame(width: 1)
-                metric(order: .memory, value: model.memory?.percent, subtitle: model.memory.map { "\(bytes($0.used)) / \(bytes(totalMemory))" } ?? "측정 중…", history: model.memoryHistory, color: purple)
+                metric(order: .cpu, value: model.cpu?.total, subtitle: "전체 코어 사용률", history: model.cpuHistory)
+                Rectangle().fill(ink.opacity(0.08)).frame(width: 1)
+                metric(order: .memory, value: model.memory?.percent, subtitle: model.memory.map { "\(bytes($0.used)) / \(bytes(totalMemory))" } ?? "측정 중…", history: model.memoryHistory)
             }.fixedSize(horizontal: false, vertical: true)
             Divider().opacity(0.5)
             HStack {
-                Label("네트워크", systemImage: "network").font(.system(size: 12, weight: .medium))
+                Label("네트워크", systemImage: "network").font(.pixel(12))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 6) {
-                    Text("↓  \(model.download)").foregroundStyle(blue)
+                    Text("↓  \(model.download)").foregroundStyle(ink)
                     Text("↑  \(model.upload)").foregroundStyle(.secondary)
-                }.font(.system(size: 12, weight: .medium, design: .monospaced))
+                }.font(.pixel(12))
             }
             Button { model.page = .storage } label: {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Label("스토리지", systemImage: "internaldrive")
                         Spacer()
-                        Text(storage?.disk.map { String(format: "%.0f%%", $0.percent) } ?? "—").monospacedDigit()
-                        Image(systemName: "chevron.right").font(.caption2).foregroundStyle(.secondary)
-                    }.font(.system(size: 12, weight: .medium))
-                    UsageBar(percent: storage?.disk?.percent ?? 0, color: storage?.disk?.warning == true ? .orange : blue)
+                        Text(storage?.disk.map { String(format: "%.0f%%", $0.percent) } ?? "—")
+                        Image(systemName: "chevron.right").font(.pixel(10)).foregroundStyle(.secondary)
+                    }.font(.pixel(12))
+                    UsageBar(percent: storage?.disk?.percent ?? 0, color: ink, warning: storage?.disk?.warning == true)
                     HStack {
                         Text(storage?.disk.map { "여유 \(bytes($0.free))" } ?? "읽기 실패")
                         Spacer()
                         if let report = storage?.report { Text("정리 후보 \(bytes(UInt64(report.candidateBytes)))") }
                         else { Text(storage?.busy == true ? "조회 중…" : "후보 확인") }
-                    }.font(.system(size: 10)).foregroundStyle(.secondary)
-                }.padding(14).background(.primary.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+                    }.font(.pixel(10)).foregroundStyle(.secondary)
+                }.padding(14).background(ink.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
             }.buttonStyle(.plain).accessibilityRepresentation { Button("스토리지 정리 열기") { model.page = .storage } }
             HStack {
-                Text(model.battery).font(.system(size: 11)).foregroundStyle(.secondary)
+                Text(model.battery).font(.pixel(11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("활성 상태 보기") { openActivityMonitor() }.font(.system(size: 11)).buttonStyle(.plain).foregroundStyle(blue)
+                Button("활성 상태 보기") { openActivityMonitor() }.font(.pixel(11)).buttonStyle(.plain).foregroundStyle(ink)
             }
         }
     }
-    private func metric(order: ProcessOrder, value: Double?, subtitle: String, history: [Double], color: Color) -> some View {
+    private func metric(order: ProcessOrder, value: Double?, subtitle: String, history: [Double]) -> some View {
         Button { model.order = order; model.page = .processes } label: {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
-                    Text(order.rawValue).font(.system(size: 12, weight: .semibold)).foregroundStyle(color)
+                    Text(order == .cpu ? "CPU" : "MEM").font(.pixel(12)).foregroundStyle(ink)
                     Spacer()
-                    Image(systemName: "arrow.up.right").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Image(systemName: "arrow.up.right").font(.pixel(10)).foregroundStyle(.secondary)
                 }
-                HStack(alignment: .firstTextBaseline, spacing: 2) {
-                    Text(value.map { String(format: "%.0f", $0) } ?? "—").font(.system(size: 40, weight: .light, design: .rounded))
-                    Text("%").font(.system(size: 17)).foregroundStyle(.secondary)
-                }.monospacedDigit()
-                Text(subtitle).font(.system(size: 10)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-                HistoryLine(values: history, color: color).padding(.vertical, 4)
-                Text("상위 프로세스").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
+                LCDScreen {
+                    VStack(alignment: .leading, spacing: 6) {
+                        HStack(alignment: .firstTextBaseline, spacing: 2) {
+                            Text(value.map { String(format: "%.0f", $0) } ?? "—").font(.pixel(40)).foregroundStyle(.white)
+                            Text("%").font(.pixel(16)).foregroundStyle(.white.opacity(0.6))
+                        }
+                        HistoryLine(values: history, color: .white).frame(height: 30)
+                    }
+                }
+                Text(subtitle).font(.pixel(10)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                Text("상위 프로세스").font(.pixel(10)).foregroundStyle(.secondary)
                 let rows = Array(order.sorted(model.processes).prefix(3))
                 if rows.isEmpty {
                     Text(model.sampled && model.processes.isEmpty ? "읽을 수 있는 프로세스 없음" : "측정 중…")
-                        .font(.system(size: 10)).foregroundStyle(.secondary).frame(height: 54, alignment: .top)
+                        .font(.pixel(10)).foregroundStyle(.secondary).frame(height: 54, alignment: .top)
                 } else {
                     ForEach(rows) { process in
                         HStack(spacing: 4) {
                             Text(process.name).lineLimit(1).truncationMode(.tail)
                             Spacer(minLength: 2)
-                            Text(processValue(process, order: order)).foregroundStyle(.secondary).monospacedDigit().fixedSize()
-                        }.font(.system(size: 10))
+                            Text(processValue(process, order: order)).foregroundStyle(.secondary).fixedSize()
+                        }.font(.pixel(10))
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
@@ -296,38 +374,38 @@ struct DashboardView: View {
             }.pickerStyle(.segmented)
             HStack(alignment: .firstTextBaseline) {
                 Text(model.order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
-                    .font(.system(size: 32, weight: .light, design: .rounded)).monospacedDigit()
-                Text(model.order == .cpu ? "전체 CPU" : "/ \(bytes(totalMemory))").font(.caption).foregroundStyle(.secondary)
+                    .font(.pixel(32))
+                Text(model.order == .cpu ? "전체 CPU" : "/ \(bytes(totalMemory))").font(.pixel(12)).foregroundStyle(.secondary)
             }
             if model.order == .cpu {
-                Text(model.cpu.map { String(format: "사용자 %.1f%% · 시스템 %.1f%%", $0.user, $0.system) } ?? "측정 중…").font(.caption).foregroundStyle(.secondary)
-                Text(model.load).font(.system(size: 10)).foregroundStyle(.secondary)
+                Text(model.cpu.map { String(format: "사용자 %.1f%% · 시스템 %.1f%%", $0.user, $0.system) } ?? "측정 중…").font(.pixel(11)).foregroundStyle(.secondary)
+                Text(model.load).font(.pixel(10)).foregroundStyle(.secondary)
             } else {
                 if let memory = model.memory {
-                    Text("앱 \(bytes(memory.app)) · Wired \(bytes(memory.wired)) · 압축 \(bytes(memory.compressed))").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("앱 \(bytes(memory.app)) · Wired \(bytes(memory.wired)) · 압축 \(bytes(memory.compressed))").font(.pixel(10)).foregroundStyle(.secondary)
                 }
-                Text(model.pressure + "\n" + model.swap).font(.caption).foregroundStyle(.secondary)
+                Text(model.pressure + "\n" + model.swap).font(.pixel(11)).foregroundStyle(.secondary)
             }
             HStack {
-                Text("상위 5개").font(.system(size: 12, weight: .semibold))
+                Text("상위 5개").font(.pixel(12))
                 Spacer()
-                Text(model.order == .cpu ? "CPU %" : "메모리").font(.caption).foregroundStyle(.secondary)
+                Text(model.order == .cpu ? "CPU %" : "메모리").font(.pixel(11)).foregroundStyle(.secondary)
             }.padding(.top, 4)
             let rows = Array(model.order.sorted(model.processes).prefix(5))
-            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "프로세스 정보를 읽을 수 없습니다." : "CPU 사용량을 측정하고 있습니다…").font(.caption).foregroundStyle(.secondary).padding(.vertical, 20) }
+            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "프로세스 정보를 읽을 수 없습니다." : "CPU 사용량을 측정하고 있습니다…").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 20) }
             ForEach(rows) { process in
                 HStack(spacing: 10) {
                     Image(systemName: "app.dashed").foregroundStyle(.secondary).font(.system(size: 19)).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(process.name).font(.system(size: 12, weight: .medium)).lineLimit(1)
-                        Text("PID \(String(process.pid))").font(.system(size: 10, design: .monospaced)).foregroundStyle(.secondary)
+                        Text(process.name).font(.pixel(12)).lineLimit(1)
+                        Text("PID \(String(process.pid))").font(.pixel(10)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(processValue(process, order: model.order)).font(.system(size: 12, weight: .medium, design: .monospaced))
+                    Text(processValue(process, order: model.order)).font(.pixel(12))
                 }.padding(.vertical, 4)
             }
             Text(model.order == .cpu ? "접근 가능한 프로세스만 표시합니다. 프로세스 CPU 100%는 코어 1개 기준으로, 여러 코어를 사용하면 100%를 넘을 수 있습니다." : "접근 가능한 프로세스만 표시합니다. 메모리는 활성 상태 보기의 메모리 열과 같은 기준입니다.")
-                .font(.system(size: 10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.pixel(10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Button("활성 상태 보기 열기") { openActivityMonitor() }.controlSize(.small)
         }
     }
@@ -335,40 +413,40 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let disk = storage?.disk {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(bytes(disk.free)).font(.system(size: 30, weight: .light, design: .rounded))
-                    Text("여유 공간").font(.caption).foregroundStyle(.secondary)
+                    Text(bytes(disk.free)).font(.pixel(30))
+                    Text("여유 공간").font(.pixel(12)).foregroundStyle(.secondary)
                 }
-                UsageBar(percent: disk.percent, color: disk.warning ? .orange : blue)
-                Text(disk.description).font(.system(size: 10)).foregroundStyle(.secondary)
-                if let detail = disk.detail { Text(detail).font(.system(size: 10)).foregroundStyle(.secondary) }
+                UsageBar(percent: disk.percent, color: ink, warning: disk.warning)
+                Text(disk.description).font(.pixel(10)).foregroundStyle(.secondary)
+                if let detail = disk.detail { Text(detail).font(.pixel(10)).foregroundStyle(.secondary) }
             }
             Divider()
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("DerivedData").font(.system(size: 14, weight: .semibold))
-                    Text("8시간 이상 사용하지 않은 캐시").font(.system(size: 10)).foregroundStyle(.secondary)
+                    Text("DerivedData").font(.pixel(14))
+                    Text("8시간 이상 사용하지 않은 캐시").font(.pixel(10)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if storage?.busy == true { ProgressView().controlSize(.small) }
                 Button { storage?.refresh() } label: { Image(systemName: "arrow.clockwise") }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
             }
-            if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : "캐시 용량을 조회하고 있습니다…").font(.caption).foregroundStyle(.secondary) }
-            if let error = storage?.lastError { Text(error).font(.system(size: 10)).foregroundStyle(.red).textSelection(.enabled) }
+            if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : "캐시 용량을 조회하고 있습니다…").font(.pixel(11)).foregroundStyle(.secondary) }
+            if let error = storage?.lastError { Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled) }
             if let report = storage?.report {
                 HStack {
                     Text("후보 \(report.candidates.count)개 · \(bytes(UInt64(report.candidateBytes)))")
                     Spacer()
                     Button(selection.count == candidatePaths.count && !selection.isEmpty ? "선택 해제" : "모두 선택") {
                         selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
-                    }.buttonStyle(.plain).foregroundStyle(blue).disabled(storage?.busy == true || candidatePaths.isEmpty)
-                }.font(.system(size: 11))
-                if report.candidates.isEmpty { Text("지금 정리할 오래된 캐시가 없습니다.").font(.caption).foregroundStyle(.secondary).padding(.vertical, 8) }
+                    }.buttonStyle(.plain).foregroundStyle(ink).disabled(storage?.busy == true || candidatePaths.isEmpty)
+                }.font(.pixel(11))
+                if report.candidates.isEmpty { Text("지금 정리할 오래된 캐시가 없습니다.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
                 ForEach(report.candidates, id: \.path) { entry in
                     HStack(spacing: 8) {
                         Toggle(isOn: Binding(get: { selection.contains(entry.path) }, set: { if $0 { selection.insert(entry.path) } else { selection.remove(entry.path) } })) {
                             VStack(alignment: .leading, spacing: 3) {
-                                Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.system(size: 11, weight: .medium))
-                                Text(bytes(UInt64(entry.size))).font(.system(size: 10)).foregroundStyle(.secondary)
+                                Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11))
+                                Text(bytes(UInt64(entry.size))).font(.pixel(10)).foregroundStyle(.secondary)
                             }
                         }.toggleStyle(.checkbox).disabled(storage?.busy == true).help(entry.path)
                         Spacer(minLength: 0)
@@ -376,20 +454,20 @@ struct DashboardView: View {
                             .buttonStyle(.plain).help("Finder에서 보기").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Finder에서 보기")
                     }.padding(.vertical, 3)
                 }
-                Text("전체 캐시 \(report.items.count)개 · \(bytes(UInt64(report.totalBytes)))").font(.system(size: 10)).foregroundStyle(.secondary)
+                Text("전체 캐시 \(report.items.count)개 · \(bytes(UInt64(report.totalBytes)))").font(.pixel(10)).foregroundStyle(.secondary)
                 Text("최근 조회 \(DateFormatter.localizedString(from: Date(timeIntervalSince1970: report.generatedAt), dateStyle: .short, timeStyle: .short))")
-                    .font(.system(size: 9)).foregroundStyle(.secondary)
+                    .font(.pixel(10)).foregroundStyle(.secondary)
             }
         }
     }
     private var storageActionBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             Toggle("공용 캐시 포함", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
-                .font(.system(size: 11)).disabled(storage?.busy == true)
+                .font(.pixel(11)).disabled(storage?.busy == true)
             Button { storage?.confirmClean(paths: Set(selectedEntries.map(\.path))) } label: {
                 Text("선택한 \(selectedEntries.count)개 정리 · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
             }.buttonStyle(.borderedProminent).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
-            Text("정리하려면 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.system(size: 10)).foregroundStyle(.secondary)
+            Text("정리하려면 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
         }
     }
     private var settings: some View {
@@ -401,11 +479,11 @@ struct DashboardView: View {
             Button("스토리지 알림 설정…") { storage?.openNotificationSettings() }
             Button("DerivedData 폴더 열기") { storage?.openFolder() }
             Button("활성 상태 보기 열기") { openActivityMonitor() }
-            Text("디스크는 1분마다, 캐시 용량은 1시간마다 확인합니다. 정리는 직접 실행할 때만 진행합니다.").font(.caption).foregroundStyle(.secondary)
-            Text("화면 모양은 macOS의 밝은 모드·어두운 모드 및 손쉬운 사용 설정을 따릅니다.").font(.caption).foregroundStyle(.secondary)
+            Text("디스크는 1분마다, 캐시 용량은 1시간마다 확인합니다. 정리는 직접 실행할 때만 진행합니다.").font(.pixel(11)).foregroundStyle(.secondary)
+            Text("화면 모양은 macOS의 밝은 모드·어두운 모드 및 손쉬운 사용 설정을 따릅니다.").font(.pixel(11)).foregroundStyle(.secondary)
             Divider()
             Button("MiniStats 종료") { model.quit?() }.disabled(storage?.cleaning == true)
-        }.font(.system(size: 12)).buttonStyle(.borderless)
+        }.buttonStyle(.borderless)
     }
     private func processValue(_ process: RankedProcess, order: ProcessOrder) -> String {
         order == .cpu ? process.cpu.map { String(format: "%.1f%%", $0) } ?? "—" : bytes(process.memory)

@@ -1,0 +1,3 @@
+[submodule "assets/Fonts/neodgm-webfont"]
+	path = assets/Fonts/neodgm-webfont
+	url = https://github.com/neodgm/neodgm-webfont.git

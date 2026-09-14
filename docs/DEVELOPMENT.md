@@ -9,6 +9,12 @@ make doctor
 make verify
 ```
 
+저장소를 처음 복제한 직후, 또는 폰트 submodule이 초기화되지 않았으면 아래 명령으로 채운다. 폰트 파일이 없으면 `build.sh`가 종료된다.
+
+```sh
+git submodule update --init --recursive
+```
+
 `make verify`는 환경 확인 → 릴리스 빌드 → Swift 자체 검사 → Python 회귀 검사 → 번들·서명·arm64 확인을 실행한다. 실패한 단계에서 종료하고 원래 실패 상태를 반환한다. 전체 로그는 `build/logs/verify-release-*`에 저장하며 터미널에는 마지막 18줄과 로그 경로를 표시한다.
 
 | 명령 | 결과 |

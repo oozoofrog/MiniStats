@@ -23,8 +23,13 @@ macOS 26 이상에서는 네이티브 유리 효과를 사용합니다.
 - 빌드: macOS 26 SDK 이상을 포함한 Xcode 또는 Command Line Tools
 
 ```sh
+git submodule update --init --recursive
 make verify
 open build/MiniStats.app
 ```
+
+## 라이센스
+
+메뉴바 픽셀 폰트로 [Neo둥근모](https://github.com/neodgm/neodgm)를 사용하며, 해당 폰트는 [SIL Open Font License 1.1](https://scripts.sil.org/OFL)로 배포된다. 폰트 파일과 라이센스 전문은 빌드된 앱 번들에 함께 포함된다.
 
 [개발 안내](docs/DEVELOPMENT.md) · [버그 제보·기능 제안](https://github.com/oozoofrog/MiniStats/issues)
