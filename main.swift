@@ -243,7 +243,7 @@ final class StatusReadout: NSStackView {
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let dashboard = DashboardModel()
-    private let popover = NSPopover()
+    private let popover = TransparentPopover()
     private let status = NSStatusBar.system.statusItem(withLength: 38)
     private let readout = NSTextField(labelWithString: "—\n—")
     private let warningIcon = NSImageView()
