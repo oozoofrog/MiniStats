@@ -22,7 +22,7 @@ for size in 16 32 128 256 512; do
     sips -z "$double" "$double" assets/AppIcon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
-xcrun swiftc "$@" -target arm64-apple-macos13.0 -import-objc-header Bridging.h main.swift Popover.swift Storage.swift Dashboard.swift -o "$APP/Contents/MacOS/MiniStats" -framework AppKit -framework IOKit -framework ServiceManagement -framework UserNotifications
+xcrun swiftc "$@" -target arm64-apple-macos26.0 -import-objc-header Bridging.h main.swift Popover.swift Storage.swift Dashboard.swift -o "$APP/Contents/MacOS/MiniStats" -framework AppKit -framework IOKit -framework ServiceManagement -framework UserNotifications
 cp Info.plist "$APP/Contents/Info.plist"
 cp deriveddata.py "$APP/Contents/Resources/deriveddata.py"
 FONT_SRC=assets/Fonts/neodgm-webfont/neodgm/neodgm.woff
