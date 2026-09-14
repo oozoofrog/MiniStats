@@ -2,7 +2,6 @@
 set -eu
 
 REPO="https://github.com/oozoofrog/MiniStats.git"
-APP_NAME="MiniStats.app"
 INSTALL_DIR="${1:-$HOME/Applications}"
 LOG_FILE="${TMPDIR:-/tmp}/ministats-install.log"
 
@@ -32,31 +31,5 @@ fi
 APP="$WORKDIR/MiniStats/build/MiniStats.app"
 [ -d "$APP" ] || fail "Built app not found: $APP"
 
-mkdir -p "$INSTALL_DIR"
-TARGET="$INSTALL_DIR/$APP_NAME"
-
-if pgrep -x MiniStats >/dev/null 2>&1; then
-    printf 'Stopping running MiniStats…\n'
-    pkill -x MiniStats || true
-    i=0
-    while pgrep -x MiniStats >/dev/null 2>&1 && [ "$i" -lt 50 ]; do
-        sleep 0.1
-        i=$((i + 1))
-    done
-    if pgrep -x MiniStats >/dev/null 2>&1; then
-        pkill -KILL -x MiniStats || true
-        i=0
-        while pgrep -x MiniStats >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
-            sleep 0.1
-            i=$((i + 1))
-        done
-    fi
-fi
-
-if [ -d "$TARGET" ]; then
-    rm -rf "$TARGET"
-fi
-ditto "$APP" "$TARGET"
-
-printf 'Installed: %s\n' "$TARGET"
-printf 'Open with: open "%s"\n' "$TARGET"
+"$WORKDIR/MiniStats/scripts/deploy-app.sh" "$APP" "$INSTALL_DIR"
+printf 'Open with: open "%s/MiniStats.app"\n' "$INSTALL_DIR"

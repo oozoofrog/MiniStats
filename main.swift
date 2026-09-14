@@ -356,7 +356,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         if !popover.isShown {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
-            popover.contentViewController?.view.window?.makeKey()
         }
         self.storage?.checkDisk()
     }

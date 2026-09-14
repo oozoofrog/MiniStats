@@ -587,35 +587,62 @@ final class SolidDashboardSurface: NSView {
 /// The Liquid Glass surface owns a single hosting content view; reduced transparency uses a solid surface.
 final class DashboardSurfaceController: NSViewController {
     private let model: DashboardModel
+    private lazy var host = NSHostingView(rootView: DashboardView(model: model))
     private var observer: NSObjectProtocol?
-    init(model: DashboardModel) { self.model = model; super.init(nibName: nil, bundle: nil) }
+
+    init(model: DashboardModel) {
+        self.model = model
+        super.init(nibName: nil, bundle: nil)
+    }
+
     required init?(coder: NSCoder) { nil }
+
     override func loadView() {
         view = NSView(frame: NSRect(x: 0, y: 0, width: 400, height: 600))
         installSurface()
-        observer = NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: nil, queue: .main) { [weak self] _ in self?.installSurface() }
+        observer = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            self?.installSurface()
+        }
     }
+
     private func installSurface() {
+        // Preserve the NSHostingView so SwiftUI local @State survives a runtime
+        // Reduce Transparency toggle; only the AppKit surface is replaced.
+        host.removeFromSuperview()
         view.subviews.forEach { $0.removeFromSuperview() }
-        let host = NSHostingView(rootView: DashboardView(model: model))
+
         let surface: NSView
         if NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency {
-            surface = SolidDashboardSurface()
-            surface.addSubview(host)
+            let solid = SolidDashboardSurface()
+            solid.addSubview(host)
+            surface = solid
         } else {
             let glass = NSGlassEffectView()
             glass.style = .regular
             glass.cornerRadius = 20
+            if #available(macOS 27.0, *) {
+                glass.effectIsInteractive = true
+            }
             glass.contentView = host
             surface = glass
         }
+
         view.addSubview(surface)
         surface.frame = view.bounds
         surface.autoresizingMask = [.width, .height]
         host.frame = surface.bounds
         host.autoresizingMask = [.width, .height]
     }
-    deinit { if let observer { NSWorkspace.shared.notificationCenter.removeObserver(observer) } }
+
+    deinit {
+        if let observer {
+            NSWorkspace.shared.notificationCenter.removeObserver(observer)
+        }
+    }
 }
 
 func dashboardSelfTest() {

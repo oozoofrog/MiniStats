@@ -3,7 +3,6 @@
 DIR ?= $(HOME)/Applications
 
 .DEFAULT_GOAL := help
-
 help:
 	@printf '%s\n' \
 		'make doctor                    Check local macOS build tools and inputs' \
@@ -11,10 +10,9 @@ help:
 		'make debug                     Debug build, existing tests, bundle checks; save log' \
 		'make run                       Build, install to ~/Applications, then launch' \
 		'make run DIR=/Applications     Build, install to /Applications, then launch' \
-		'make install                   Build then install to ~/Applications' \
-		'make install DIR=/Applications Build then install to /Applications' \
+		'make install                   Build local source then install to ~/Applications' \
+		'make install DIR=/Applications Build local source then install to /Applications' \
 		'make test-python               Cleaner regression tests in temporary directories'
-
 doctor:
 	@./scripts/doctor.sh
 
@@ -28,7 +26,8 @@ run:
 	@DIR="$(DIR)" ./scripts/run.sh
 
 install:
-	@./scripts/install.sh "$(DIR)"
+	@./build.sh
+	@./scripts/deploy-app.sh build/MiniStats.app "$(DIR)"
 
 test-python:
 	@/usr/bin/python3 tests/test_deriveddata.py

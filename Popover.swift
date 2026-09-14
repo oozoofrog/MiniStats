@@ -346,11 +346,11 @@ final class TransparentPopover {
     private func updateTransientTracking() {
         removeTransientTracking()
 
-        guard state == .hidden else {
+        guard behavior == .transient else {
             return
         }
 
-        guard behavior == .transient else {
+        guard state == .showing || state == .shown else {
             return
         }
 
