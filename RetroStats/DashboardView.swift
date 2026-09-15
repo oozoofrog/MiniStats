@@ -6,6 +6,7 @@ struct DashboardView: View {
     @ObservedObject var model: DashboardModel
     var renderOnly = false
     @State private var selection: Set<String> = []
+    @State private var transitionStart: Date?
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let ink = Color.primary
     private var storage: StorageController? { model.storage }
@@ -55,8 +56,26 @@ struct DashboardView: View {
         .font(.pixel(13))
         .frame(width: 400, height: 600)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .overlay {
+            if let start = transitionStart {
+                TimelineView(.animation) { context in
+                    let elapsed = context.date.timeIntervalSince(start)
+                    let progress = min(1, elapsed / 0.5)
+                    PixelTransition(progress: progress, color: ink)
+                        .opacity(progress < 1 ? 1 : 0)
+                }
+            }
+        }
         .onChange(of: candidatePaths) { _, newPaths in
             selection.formIntersection(newPaths)
+        }
+        .onChange(of: model.page) { _, _ in
+            guard !reduceMotion else { return }
+            transitionStart = .now
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                await MainActor.run { transitionStart = nil }
+            }
         }
         .animation(reduceMotion ? nil : .easeInOut(duration: 0.18), value: model.page)
     }
