@@ -205,7 +205,7 @@ struct DashboardView: View {
                     Text("8시간 이상 사용하지 않은 캐시").font(.pixel(10)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if storage?.busy == true { ProgressView().controlSize(.small) }
+                if storage?.busy == true { PixelHourglass(size: 14, color: ink) }
                 Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink) }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
             }
             if let progress = storage?.cleanProgress {

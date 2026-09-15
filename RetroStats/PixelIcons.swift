@@ -120,3 +120,63 @@ struct PixelRefresh: View {
         return c
     }()
 }
+
+// MARK: - PixelHourglass
+
+/// 1-bit hourglass spinner for the storage refresh state. Top bulb cells drain
+/// frame-by-frame into the bottom bulb, then the cycle resets. Replaces the
+/// system `ProgressView` spinner so the LCD pixel language stays consistent.
+struct PixelHourglass: View {
+    var size: CGFloat = 16
+    var color: Color = .primary
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        if reduceMotion {
+            PixelCells(cells: Self.outlineCells, color: color, size: size)
+        } else {
+            TimelineView(.periodic(from: .now, by: 1.0 / 8.0)) { context in
+                PixelCells(cells: frame(for: context.date), color: color, size: size)
+            }
+        }
+    }
+
+    private func frame(for date: Date) -> [(Int, Int)] {
+        let cycle = Self.topCells.count + Self.botCells.count + 4
+        let step = Int(date.timeIntervalSinceReferenceDate * 8) % cycle
+        let drain = min(step, Self.topCells.count)
+        let fill = max(0, min(step - Self.topCells.count, Self.botCells.count))
+        var active: [(Int, Int)] = []
+        for (idx, cell) in Self.topCells.enumerated() where idx < Self.topCells.count - drain {
+            active.append(cell)
+        }
+        for (idx, cell) in Self.botCells.enumerated() where idx < fill {
+            active.append(cell)
+        }
+        return active
+    }
+
+    /// Upper bulb cells, narrowing toward the center (row 1 → 5).
+    static let topCells: [(Int, Int)] = {
+        var c: [(Int, Int)] = []
+        for j in 1...5 {
+            let w = 6 - j
+            let start = 8 - w / 2
+            for i in 0..<w { c.append((start + i, j)) }
+        }
+        return c
+    }()
+
+    /// Lower bulb cells, widening away from the center (row 10 → 14).
+    static let botCells: [(Int, Int)] = {
+        var c: [(Int, Int)] = []
+        for j in 10...14 {
+            let w = j - 9
+            let start = 8 - w / 2
+            for i in 0..<w { c.append((start + i, j)) }
+        }
+        return c
+    }()
+
+    static let outlineCells: [(Int, Int)] = topCells + botCells
+}
