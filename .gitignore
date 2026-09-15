@@ -1,8 +1,8 @@
 build/
-__pycache__/
 .DS_Store
 RetroStats/Assets.xcassets/AppIcon.appiconset/*.png
 RetroStats/Fonts/
 *.xcuserstate
 RetroStats.xcodeproj/xcuserdata/
 RetroStats.xcodeproj/project.xcworkspace/xcuserdata/
+visualizations/
