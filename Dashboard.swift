@@ -514,44 +514,169 @@ struct DashboardView: View {
                 if storage?.busy == true { ProgressView().controlSize(.small) }
                 Button { storage?.refresh() } label: { Image(systemName: "arrow.clockwise") }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
             }
-            if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : "캐시 용량을 조회하고 있습니다…").font(.pixel(11)).foregroundStyle(.secondary) }
-            if let error = storage?.lastError { Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled) }
-            if let report = storage?.report {
-                HStack {
-                    Text("후보 \(report.candidates.count)개 · \(bytes(UInt64(report.candidateBytes)))")
-                    Spacer()
-                    Button(selection.count == candidatePaths.count && !selection.isEmpty ? "선택 해제" : "모두 선택") {
-                        selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
-                    }.buttonStyle(.plain).foregroundStyle(ink).disabled(storage?.busy == true || candidatePaths.isEmpty)
-                }.font(.pixel(11))
-                if report.candidates.isEmpty { Text("지금 정리할 오래된 캐시가 없습니다.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
-                ForEach(report.candidates, id: \.path) { entry in
-                    HStack(spacing: 8) {
-                        Toggle(isOn: Binding(get: { selection.contains(entry.path) }, set: { if $0 { selection.insert(entry.path) } else { selection.remove(entry.path) } })) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11))
-                                Text(bytes(UInt64(entry.size))).font(.pixel(10)).foregroundStyle(.secondary)
-                            }
-                        }.toggleStyle(.checkbox).disabled(storage?.busy == true).help(entry.path)
-                        Spacer(minLength: 0)
-                        Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) } label: { Image(systemName: "folder") }
-                            .buttonStyle(.plain).help("Finder에서 보기").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Finder에서 보기")
-                    }.padding(.vertical, 3)
+            if let progress = storage?.cleanProgress {
+                cleanProgressSection(progress)
+            } else {
+                if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : "캐시 용량을 조회하고 있습니다…").font(.pixel(11)).foregroundStyle(.secondary) }
+                if let error = storage?.lastError { Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled) }
+                if let report = storage?.report {
+                    HStack {
+                        Text("후보 \(report.candidates.count)개 · \(bytes(UInt64(report.candidateBytes)))")
+                        Spacer()
+                        Button(selection.count == candidatePaths.count && !selection.isEmpty ? "선택 해제" : "모두 선택") {
+                            selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
+                        }.buttonStyle(.plain).foregroundStyle(ink).disabled(storage?.busy == true || candidatePaths.isEmpty)
+                    }.font(.pixel(11))
+                    if report.candidates.isEmpty { Text("지금 정리할 오래된 캐시가 없습니다.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
+                    ForEach(report.candidates, id: \.path) { entry in
+                        HStack(spacing: 8) {
+                            Toggle(isOn: Binding(get: { selection.contains(entry.path) }, set: { if $0 { selection.insert(entry.path) } else { selection.remove(entry.path) } })) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11))
+                                    Text(bytes(UInt64(entry.size))).font(.pixel(10)).foregroundStyle(.secondary)
+                                }
+                            }.toggleStyle(.checkbox).disabled(storage?.busy == true).help(entry.path)
+                            Spacer(minLength: 0)
+                            Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) } label: { Image(systemName: "folder") }
+                                .buttonStyle(.plain).help("Finder에서 보기").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Finder에서 보기")
+                        }.padding(.vertical, 3)
+                    }
+                    Text("전체 캐시 \(report.items.count)개 · \(bytes(UInt64(report.totalBytes)))").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("최근 조회 \(DateFormatter.localizedString(from: Date(timeIntervalSince1970: report.generatedAt), dateStyle: .short, timeStyle: .short))")
+                        .font(.pixel(10)).foregroundStyle(.secondary)
                 }
-                Text("전체 캐시 \(report.items.count)개 · \(bytes(UInt64(report.totalBytes)))").font(.pixel(10)).foregroundStyle(.secondary)
-                Text("최근 조회 \(DateFormatter.localizedString(from: Date(timeIntervalSince1970: report.generatedAt), dateStyle: .short, timeStyle: .short))")
-                    .font(.pixel(10)).foregroundStyle(.secondary)
             }
+        }
+    }
+    @ViewBuilder
+    private func cleanProgressSection(_ progress: CleanProgress) -> some View {
+        switch progress.phase {
+        case .confirming: cleanConfirmCard(progress)
+        case .running: cleanRunningSection(progress)
+        case .done, .cancelled: cleanResultSection(progress)
+        case .failed: cleanFailedSection(progress)
+        }
+    }
+    private func cleanConfirmCard(_ progress: CleanProgress) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("선택한 \(progress.totalCount)개 · \(bytes(UInt64(progress.items.reduce(Int64(0)) { $0 + $1.size })))를 영구 삭제할까요?").font(.pixel(13))
+            Text("8시간 기준으로 다시 검사한 뒤 삭제합니다. 사용 중인 항목은 자동으로 유지됩니다.").font(.pixel(11)).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                ForEach(progress.items, id: \.path) { item in
+                    Text(URL(fileURLWithPath: item.path).lastPathComponent).font(.pixel(10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                }
+            }
+            Text("정리 전 Xcode와 xcodebuild를 종료하고, 정리 중에는 새 빌드를 시작하지 마세요.").font(.pixel(10)).foregroundStyle(.secondary)
+        }.padding(14).lcdPanel(cornerRadius: 12)
+    }
+    private func cleanRunningSection(_ progress: CleanProgress) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("정리 진행").font(.pixel(14))
+                Spacer()
+                ProgressView().controlSize(.small)
+            }
+            HStack {
+                Text("\(progress.resolvedCount) / \(progress.totalCount) 항목").font(.pixel(13))
+                Spacer()
+                Text("확보 \(bytes(UInt64(progress.freedBytes)))").font(.pixel(12)).foregroundStyle(.secondary)
+            }
+            UsageBar(percent: Double(progress.resolvedCount) / Double(max(progress.totalCount, 1)) * 100, color: ink)
+            if let path = progress.currentPath {
+                Text("삭제 중: \(URL(fileURLWithPath: path).lastPathComponent)").font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+            }
+            VStack(alignment: .leading, spacing: 3) {
+                ForEach(progress.items, id: \.path) { item in
+                    HStack(spacing: 8) {
+                        cleanItemIcon(item.state)
+                        Text(URL(fileURLWithPath: item.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11)).foregroundStyle(item.state == .pending || item.state == .kept ? .secondary : ink)
+                        Spacer(minLength: 0)
+                        Text(bytes(UInt64(item.size))).font(.pixel(10)).foregroundStyle(.secondary)
+                        Text(cleanItemTag(item.state)).font(.pixel(10)).foregroundStyle(.secondary)
+                    }.padding(.vertical, 2)
+                }
+            }
+        }
+    }
+    private func cleanResultSection(_ progress: CleanProgress) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(progress.phase == .cancelled ? "정리 취소" : "정리 완료").font(.pixel(14))
+                Spacer()
+                Image(systemName: progress.phase == .cancelled ? "minus.circle" : "checkmark.circle").foregroundStyle(progress.phase == .cancelled ? Color.secondary : Color.green)
+            }
+            HStack(alignment: .firstTextBaseline) {
+                Text(bytes(UInt64(progress.freedBytes))).font(.pixel(26))
+                Text("확보된 공간").font(.pixel(12)).foregroundStyle(.secondary)
+            }
+            HStack(spacing: 16) {
+                Text("삭제 \(progress.deletedCount)").font(.pixel(11)).foregroundStyle(.secondary)
+                Text("유지 \(progress.keptCount)").font(.pixel(11)).foregroundStyle(.secondary)
+                Text("전체 \(progress.totalCount)").font(.pixel(11)).foregroundStyle(.secondary)
+            }
+            if progress.phase == .cancelled {
+                Text("정리를 중단했습니다. 진행 중인 항목까지만 반영됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+            }
+        }
+    }
+    private func cleanFailedSection(_ progress: CleanProgress) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("정리 실패").font(.pixel(14))
+                Spacer()
+                Image(systemName: "exclamationmark.triangle").foregroundStyle(.red)
+            }
+            if let error = progress.error {
+                Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled)
+            }
+        }
+    }
+    @ViewBuilder
+    private func cleanItemIcon(_ state: CleanProgress.ItemState) -> some View {
+        switch state {
+        case .deleted: Image(systemName: "checkmark").foregroundStyle(.green).font(.pixel(11))
+        case .deleting: ProgressView().controlSize(.mini)
+        case .kept: Image(systemName: "minus").foregroundStyle(.secondary).font(.pixel(11))
+        case .failed: Image(systemName: "xmark").foregroundStyle(.red).font(.pixel(11))
+        case .pending: Image(systemName: "circle").foregroundStyle(.secondary).font(.pixel(11))
+        }
+    }
+    private func cleanItemTag(_ state: CleanProgress.ItemState) -> String {
+        switch state {
+        case .deleted: return "삭제됨"
+        case .deleting: return "삭제 중"
+        case .kept: return "유지"
+        case .failed: return "실패"
+        case .pending: return "대기"
         }
     }
     private var storageActionBar: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Toggle("공용 캐시 포함", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
-                .font(.pixel(11)).disabled(storage?.busy == true)
-            Button { storage?.confirmClean(paths: Set(selectedEntries.map(\.path))) } label: {
-                Text("선택한 \(selectedEntries.count)개 정리 · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
-            }.buttonStyle(.borderedProminent).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
-            Text("정리하려면 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+            if storage?.cleanProgress?.phase == .confirming {
+                Button { storage?.confirmCleanRun() } label: {
+                    Text("삭제 실행").frame(maxWidth: .infinity)
+                }.buttonStyle(.borderedProminent)
+                Button { storage?.cancelClean() } label: {
+                    Text("취소").frame(maxWidth: .infinity)
+                }
+                Text("정리 전 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+            } else if storage?.cleanProgress?.phase == .running {
+                Button { storage?.cancelClean() } label: {
+                    Text("정리 취소").frame(maxWidth: .infinity)
+                }.buttonStyle(.borderedProminent)
+                Text("정리 중에는 새 빌드를 시작하지 마세요. 취소하면 진행 중인 항목까지만 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+            } else if let phase = storage?.cleanProgress?.phase, phase == .done || phase == .cancelled || phase == .failed {
+                Button { storage?.dismissCleanProgress(); storage?.refresh() } label: {
+                    Text("다시 조회").frame(maxWidth: .infinity)
+                }.buttonStyle(.borderedProminent)
+            } else {
+                Toggle("공용 캐시 포함", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
+                    .font(.pixel(11)).disabled(storage?.busy == true)
+                Button { storage?.beginClean(paths: Set(selectedEntries.map(\.path))) } label: {
+                    Text("선택한 \(selectedEntries.count)개 정리 · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
+                }.buttonStyle(.borderedProminent).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
+                Text("정리하려면 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+            }
         }
     }
     private var settings: some View {

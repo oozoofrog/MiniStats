@@ -58,6 +58,27 @@ struct CacheReport: Decodable {
     }
 }
 
+struct CleanProgress {
+    enum Phase { case confirming, running, done, failed, cancelled }
+    enum ItemState { case pending, deleting, deleted, kept, failed }
+    struct Item {
+        let path: String
+        let size: Int64
+        var state: ItemState = .pending
+    }
+    var phase: Phase
+    var items: [Item]
+    var freedBytes: Int64
+    var cancelled: Bool
+    var currentPath: String?
+    var summary: String?
+    var error: String?
+    var totalCount: Int { items.count }
+    var resolvedCount: Int { items.filter { $0.state == .deleted || $0.state == .kept || $0.state == .failed }.count }
+    var deletedCount: Int { items.filter { $0.state == .deleted }.count }
+    var keptCount: Int { items.filter { $0.state == .kept }.count }
+}
+
 final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     let menuItem = NSMenuItem(title: "스토리지 정리", action: nil, keyEquivalent: "")
     private(set) var disk: DiskUsage?
@@ -66,6 +87,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     private(set) var busy = false
     private var running: Process?
     private(set) var lastError: String?
+    private(set) var cleanProgress: CleanProgress?
     private var timer: Timer?
     private var lastScan = Date.distantPast
     private var sendingNotification = false
@@ -253,22 +275,42 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     @objc private func showError() { alert("DerivedData 작업 오류", lastError ?? "오류 정보가 없습니다.") }
 
     @objc private func confirmAllClean() {
-        confirmClean(paths: Set(report?.candidates.map(\.path) ?? []))
+        guard beginClean(paths: Set(report?.candidates.map(\.path) ?? [])) else { return }
+        openMenu()
     }
 
-    func confirmClean(paths: Set<String>) {
-        guard !busy, lastError == nil, let report, !paths.isEmpty else { return }
+    @discardableResult
+    func beginClean(paths: Set<String>) -> Bool {
+        guard !busy, lastError == nil, let report, !paths.isEmpty else { return false }
         let entries = report.candidates.filter { paths.contains($0.path) }
-        guard Set(entries.map(\.path)) == paths else { return }
-        NSApp.activate(ignoringOtherApps: true)
-        let dialog = NSAlert()
-        dialog.messageText = "선택한 DerivedData를 영구 삭제할까요?"
-        let size = entries.reduce(Int64(0)) { $0 + $1.size }
-        dialog.informativeText = "선택한 \(entries.count)개 · \(bytes(UInt64(size)))\n\n" + entries.map { URL(fileURLWithPath: $0.path).lastPathComponent }.joined(separator: "\n") + "\n\n8시간 기준으로 다시 검사합니다. Xcode와 xcodebuild를 먼저 종료하고 정리 중에는 새 빌드를 시작하지 마세요."
-        dialog.alertStyle = .warning
-        dialog.addButton(withTitle: "취소")
-        dialog.addButton(withTitle: "정리 실행")
-        if dialog.runModal() == .alertSecondButtonReturn { run(clean: true, paths: paths.sorted()) }
+        guard Set(entries.map(\.path)) == paths else { return false }
+        cleanProgress = CleanProgress(
+            phase: .confirming,
+            items: entries.map { CleanProgress.Item(path: $0.path, size: $0.size) },
+            freedBytes: 0, cancelled: false, currentPath: nil, summary: nil, error: nil
+        )
+        changed()
+        return true
+    }
+
+    func confirmCleanRun() {
+        guard let progress = cleanProgress, progress.phase == .confirming else { return }
+        run(clean: true, paths: progress.items.map(\.path))
+    }
+
+    func cancelClean() {
+        if cleanProgress?.phase == .confirming {
+            cleanProgress = nil
+            changed()
+        } else if cleanProgress?.phase == .running {
+            cleanProgress?.cancelled = true
+            running?.terminate()
+        }
+    }
+
+    func dismissCleanProgress() {
+        cleanProgress = nil
+        changed()
     }
 
     private func run(clean: Bool, paths: [String] = []) {
@@ -282,6 +324,19 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         busy = true
         cleaning = clean
         lastError = nil
+        if clean, var progress = cleanProgress {
+            progress.phase = .running
+            progress.cancelled = false
+            progress.freedBytes = 0
+            progress.summary = nil
+            progress.error = nil
+            for i in progress.items.indices { progress.items[i].state = .pending }
+            if let firstIdx = progress.items.firstIndex(where: { $0.state == .pending }) {
+                progress.items[firstIdx].state = .deleting
+                progress.currentPath = progress.items[firstIdx].path
+            }
+            cleanProgress = progress
+        }
         rebuildMenu()
         changed()
         let process = Process()
@@ -296,35 +351,93 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 let temporary = fm.temporaryDirectory.appendingPathComponent("ministats-" + UUID().uuidString)
                 try fm.createDirectory(at: temporary, withIntermediateDirectories: true)
                 defer { try? fm.removeItem(at: temporary) }
-                let outputURL = temporary.appendingPathComponent("stdout")
                 let errorURL = temporary.appendingPathComponent("stderr")
-                fm.createFile(atPath: outputURL.path, contents: nil)
                 fm.createFile(atPath: errorURL.path, contents: nil)
-                let output = try FileHandle(forWritingTo: outputURL)
                 let errors = try FileHandle(forWritingTo: errorURL)
-                defer { try? output.close(); try? errors.close() }
-                // Files avoid pipe-buffer deadlocks during a long scan or cleanup.
-                process.standardOutput = output
-                process.standardError = errors
-                try process.run()
-                process.waitUntilExit()
-                let data = try Data(contentsOf: outputURL)
-                let stderr = try String(contentsOf: errorURL, encoding: .utf8)
-                let stdout = String(decoding: data, as: UTF8.self)
-                if clean { try (stdout + "\n" + stderr).write(to: support.appendingPathComponent("last-cleanup.txt"), atomically: true, encoding: .utf8) }
-                if process.terminationStatus != 0 {
-                    throw NSError(domain: "DerivedData", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: String((stdout + "\n" + stderr).suffix(6000))])
+                defer { try? errors.close() }
+                let stdoutPipe: Pipe? = clean ? Pipe() : nil
+                if let stdoutPipe {
+                    process.standardOutput = stdoutPipe
+                } else {
+                    let outputURL = temporary.appendingPathComponent("stdout")
+                    fm.createFile(atPath: outputURL.path, contents: nil)
+                    let output = try FileHandle(forWritingTo: outputURL)
+                    defer { try? output.close() }
+                    // Files avoid pipe-buffer deadlocks during a long scan.
+                    process.standardOutput = output
                 }
+                process.standardError = errors
+                var collectedLines: [String] = []
+                if let stdoutPipe {
+                    let readHandle = stdoutPipe.fileHandleForReading
+                    let readGroup = DispatchGroup()
+                    readGroup.enter()
+                    DispatchQueue.global(qos: .utility).async {
+                        var lineBuffer = Data()
+                        while true {
+                            let chunk = readHandle.availableData
+                            if chunk.isEmpty { break }
+                            lineBuffer.append(chunk)
+                            while let nl = lineBuffer.firstIndex(of: 0x0A) {
+                                let line = String(data: lineBuffer.subdata(in: 0..<nl), encoding: .utf8) ?? ""
+                                lineBuffer.removeSubrange(0...nl)
+                                collectedLines.append(line)
+                                self.handleCleanLine(line)
+                            }
+                        }
+                        if !lineBuffer.isEmpty {
+                            let line = String(data: lineBuffer, encoding: .utf8) ?? ""
+                            collectedLines.append(line)
+                            self.handleCleanLine(line)
+                        }
+                        readGroup.leave()
+                    }
+                    try process.run()
+                    process.waitUntilExit()
+                    readGroup.wait()
+                } else {
+                    try process.run()
+                    process.waitUntilExit()
+                }
+                let stderr = try String(contentsOf: errorURL, encoding: .utf8)
                 if clean {
-                    let summary = stdout.split(separator: "\n").last.map(String.init) ?? "정리가 완료되었습니다."
-                    DispatchQueue.main.async {
-                        self.report = nil
-                        self.finish()
-                        self.checkDisk()
-                        self.alert("DerivedData 정리 완료", summary)
-                        self.refresh()
+                    let stdout = collectedLines.joined(separator: "\n")
+                    try (stdout + "\n" + stderr).write(to: support.appendingPathComponent("last-cleanup.txt"), atomically: true, encoding: .utf8)
+                    if process.terminationStatus != 0 {
+                        let message = String((stdout + "\n" + stderr).suffix(6000))
+                        DispatchQueue.main.async {
+                            if self.cleanProgress?.cancelled == true {
+                                self.cleanProgress?.phase = .cancelled
+                            } else {
+                                self.cleanProgress?.phase = .failed
+                                self.cleanProgress?.error = message
+                                self.lastError = message
+                            }
+                            self.finish()
+                            self.checkDisk()
+                            self.refresh()
+                        }
+                    } else {
+                        let summary = stdout.split(separator: "\n").last.map(String.init) ?? "정리가 완료되었습니다."
+                        DispatchQueue.main.async {
+                            if var progress = self.cleanProgress {
+                                progress.phase = .done
+                                progress.summary = summary
+                                self.cleanProgress = progress
+                            }
+                            self.report = nil
+                            self.finish()
+                            self.checkDisk()
+                            self.refresh()
+                        }
                     }
                 } else {
+                    let outputURL = temporary.appendingPathComponent("stdout")
+                    let data = try Data(contentsOf: outputURL)
+                    if process.terminationStatus != 0 {
+                        let stdout = String(decoding: data, as: UTF8.self)
+                        throw NSError(domain: "DerivedData", code: Int(process.terminationStatus), userInfo: [NSLocalizedDescriptionKey: String((stdout + "\n" + stderr).suffix(6000))])
+                    }
                     let report = try CacheReport.decode(data)
                     try data.write(to: support.appendingPathComponent("report.json"), options: .atomic)
                     DispatchQueue.main.async {
@@ -336,10 +449,58 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 let message = error.localizedDescription
                 DispatchQueue.main.async {
                     self.lastError = message
+                    if clean, var progress = self.cleanProgress {
+                        progress.phase = .failed
+                        progress.error = message
+                        self.cleanProgress = progress
+                    }
                     self.finish()
-                    if clean { self.alert("DerivedData 정리를 완료하지 못했습니다", message) }
                 }
             }
+        }
+    }
+
+    private func handleCleanLine(_ line: String) {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        DispatchQueue.main.async { self.applyCleanLine(trimmed) }
+    }
+
+    private func applyCleanLine(_ line: String) {
+        guard var progress = cleanProgress else { return }
+        var didChange = false
+        if line.hasPrefix("삭제: ") {
+            let rest = String(line.dropFirst("삭제: ".count))
+            if let parenRange = rest.range(of: " (", options: .backwards) {
+                let path = String(rest[..<parenRange.lowerBound])
+                if let idx = progress.items.firstIndex(where: { $0.path == path }), progress.items[idx].state == .pending || progress.items[idx].state == .deleting {
+                    progress.items[idx].state = .deleted
+                    progress.freedBytes += progress.items[idx].size
+                    didChange = true
+                }
+            }
+        } else if line.hasPrefix("유지 (조회 이후 변경됨): ") {
+            let prefix = "유지 (조회 이후 변경됨): "
+            let path = String(line.dropFirst(prefix.count))
+            if let idx = progress.items.firstIndex(where: { $0.path == path }), progress.items[idx].state == .pending || progress.items[idx].state == .deleting {
+                progress.items[idx].state = .kept
+                didChange = true
+            }
+        } else if line.hasPrefix("정리 완료: ") {
+            progress.summary = line
+            didChange = true
+        }
+        if didChange, progress.phase == .running {
+            if let nextIdx = progress.items.firstIndex(where: { $0.state == .pending }) {
+                progress.items[nextIdx].state = .deleting
+                progress.currentPath = progress.items[nextIdx].path
+            } else {
+                progress.currentPath = nil
+            }
+        }
+        if didChange {
+            cleanProgress = progress
+            changed()
         }
     }
 
