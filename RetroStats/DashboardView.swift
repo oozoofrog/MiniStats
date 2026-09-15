@@ -205,13 +205,13 @@ struct DashboardView: View {
                     Text("8시간 이상 사용하지 않은 캐시").font(.pixel(10)).foregroundStyle(.secondary)
                 }
                 Spacer()
-                if storage?.busy == true { PixelHourglass(size: 14, color: ink) }
+                if storage?.busy == true && storage?.cleaning == true { PixelHourglass(size: 14, color: ink) }
                 Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink, animating: storage?.busy == true) }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
             }
             if let progress = storage?.cleanProgress {
                 cleanProgressSection(progress)
             } else {
-                if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : "캐시 용량을 조회하고 있습니다…").font(.pixel(11)).foregroundStyle(.secondary) }
+                if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : (storage?.scanPath.map { "조회 중: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "캐시 용량을 조회하고 있습니다…")).font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
                 if let error = storage?.lastError { Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled) }
                 if let report = storage?.report {
                     HStack {

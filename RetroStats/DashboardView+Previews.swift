@@ -110,6 +110,10 @@ private func storageModel(_ storage: StorageController) -> DashboardModel {
     DashboardView(model: storageModel(.preview(busy: true)))
 }
 
+#Preview("스토리지 정리 — 스캔 진행") {
+    DashboardView(model: storageModel(.preview(busy: true, scanPath: "/Users/dev/Library/Developer/Xcode/DerivedData/MyApp-gjklmneeqwertyuiopasdfgh")))
+}
+
 #Preview("스토리지 정리 — 조회 오류") {
     DashboardView(model: storageModel(.preview(report: makeReport(), lastError: "DerivedData 경로를 읽을 수 없습니다: 권한 거부됨")))
 }

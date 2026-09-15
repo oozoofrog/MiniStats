@@ -13,6 +13,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     #endif
     private(set) var lastError: String?
     private(set) var cleanProgress: CleanProgress?
+    @Published private(set) var scanPath: String?
     private var timer: Timer?
     private var lastScan = Date.distantPast
     private var sendingNotification = false
@@ -272,7 +273,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                         DispatchQueue.main.async { self?.applyCleanEvent(event) }
                     }
                 } else {
-                    let report = try await cleaner.scanReport(hours: 8, includeShared: includeShared)
+                    let report = try await cleaner.scanReport(hours: 8, includeShared: includeShared) { path in
+                        DispatchQueue.main.async { self.scanPath = path }
+                    }
                     let data = try CacheReport.encode(report)
                     try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
                     try data.write(to: support.appendingPathComponent("report.json"), options: .atomic)
@@ -360,6 +363,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     private func finish() {
         busy = false
         cleaning = false
+        scanPath = nil
         task = nil
         rebuildMenu()
         changed()
@@ -391,7 +395,8 @@ extension StorageController {
         busy: Bool = false,
         cleaning: Bool = false,
         lastError: String? = nil,
-        cleanProgress: CleanProgress? = nil
+        cleanProgress: CleanProgress? = nil,
+        scanPath: String? = nil
     ) -> StorageController {
         let controller = StorageController(changed: {}, openMenu: {}, startServices: false)
         controller.previewLocked = true
@@ -401,6 +406,7 @@ extension StorageController {
         controller.cleaning = cleaning
         controller.lastError = lastError
         controller.cleanProgress = cleanProgress
+        controller.scanPath = scanPath
         return controller
     }
 }

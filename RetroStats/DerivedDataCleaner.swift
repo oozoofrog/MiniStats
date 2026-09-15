@@ -39,17 +39,21 @@ struct DerivedDataCleaner {
     /// Scan default DerivedData roots and return a report. Throws on the first
     /// cache that cannot be inspected (e.g. cross-device, broken info.plist),
     /// matching the former Python behavior where one bad cache aborts the scan.
-    func scanReport(hours: Int, includeShared: Bool) async throws -> CacheReport {
-        try await scan(roots: defaultRoots(), hours: hours, includeShared: includeShared)
+    /// `scanning` is invoked with each path as it begins inspection.
+    func scanReport(hours: Int, includeShared: Bool,
+                    scanning: ((String) -> Void)? = nil) async throws -> CacheReport {
+        try await scan(roots: defaultRoots(), hours: hours, includeShared: includeShared, scanning: scanning)
     }
 
     /// Scan the given roots (each a DerivedData parent folder or a single cache)
-    /// and return a report.
-    func scan(roots: [String], hours: Int, includeShared: Bool) async throws -> CacheReport {
+    /// and return a report. `scanning` is invoked with each path as it begins
+    /// inspection, so callers can show live progress.
+    func scan(roots: [String], hours: Int, includeShared: Bool,
+              scanning: ((String) -> Void)? = nil) async throws -> CacheReport {
         let now = Date().timeIntervalSince1970
         let cutoff = now - Double(hours) * 3600
         let paths = try collectScanPaths(roots: roots)
-        let items = try await inspectAll(paths: paths)
+        let items = try await inspectAll(paths: paths, scanning: scanning)
         return buildReport(items: items, now: now, hours: hours, cutoff: cutoff, includeShared: includeShared)
     }
 
@@ -239,13 +243,16 @@ struct DerivedDataCleaner {
 
     // MARK: - Concurrent inspect
 
-    private func inspectAll(paths: [String]) async throws -> [Inspected] {
+    private func inspectAll(paths: [String], scanning: ((String) -> Void)? = nil) async throws -> [Inspected] {
         // The cooperative pool bounds actual parallelism to the core count; for a
         // modest number of DerivedData caches this is sufficient and avoids the
         // contention of a separate concurrency limiter.
         try await withThrowingTaskGroup(of: Inspected.self) { group in
             for path in paths {
-                group.addTask { try self.inspect(path: path) }
+                group.addTask {
+                    scanning?(path)
+                    return try self.inspect(path: path)
+                }
             }
             var results: [Inspected] = []
             results.reserveCapacity(paths.count)
