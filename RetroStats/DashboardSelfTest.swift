@@ -1,0 +1,34 @@
+import Foundation
+
+func dashboardSelfTest() {
+    let old = ProcessSample(name: "old", start: 1, cpuTime: 1_000_000_000, memory: 10)
+    let current = ProcessSample(name: "busy", start: 1, cpuTime: 5_000_000_000, memory: 20)
+    let reused = ProcessSample(name: "reused", start: 2, cpuTime: 9_000_000_000, memory: 40)
+    let reset = ProcessSample(name: "reset", start: 1, cpuTime: 0, memory: 30)
+    let rows = rankedProcesses(before: [1: old, 2: old, 3: old], after: [1: current, 2: reused, 3: reset], seconds: 2)
+    precondition(ProcessOrder.cpu.sorted(rows).map(\.pid) == [1])
+    precondition(ProcessOrder.cpu.sorted(rows).first?.cpu == 200)
+    precondition(ProcessOrder.memory.sorted(rows).map(\.pid) == [2, 3, 1])
+    for seconds in [0, 0.5, -1, Double.infinity, Double.nan] {
+        let initial = rankedProcesses(before: [1: old], after: [1: current], seconds: seconds)
+        precondition(initial.count == 1 && initial[0].cpu == nil && initial[0].memory == 20)
+    }
+    let ties = rankedProcesses(before: [:], after: [8: current, 4: current], seconds: 0)
+    precondition(ProcessOrder.memory.sorted(ties).map(\.pid) == [4, 8])
+    precondition(rows.first(where: { $0.pid == 2 })?.id == "2:2")
+    let background = DispatchQueue(label: "RetroStats.selftest").sync { processSamples() }
+    precondition((background[getpid()]?.memory ?? 0) > 0, "Background libproc sampling failed")
+    let model = DashboardModel(readProcesses: { [1: current] })
+    model.begin()
+    let deadline = Date(timeIntervalSinceNow: 5)
+    while !model.sampled && Date() < deadline { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02)) }
+    precondition(model.sampled && model.processes.first?.memory == 20)
+    model.end()
+    precondition(model.processes.isEmpty)
+    model.begin()
+    model.end()
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+    precondition(model.processes.isEmpty, "Late process result resurrected closed dashboard")
+    print("PASS: dashboard async delivery and close/reopen cancellation, live background sampling")
+    print("PASS: dashboard process PID identity, reuse/reset rejection, first-sample memory, finite intervals, multicore CPU, deterministic ranking")
+}

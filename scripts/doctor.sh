@@ -9,7 +9,7 @@ for tool in xcodebuild xcrun sips codesign plutil lipo make; do
     command -v "$tool" >/dev/null 2>&1 || fail "Missing tool: $tool"
 done
 [ -x /usr/bin/python3 ] || fail 'The app requires /usr/bin/python3.'
-for input in RetroStats/main.swift RetroStats/Popover.swift RetroStats/Storage.swift RetroStats/Dashboard.swift RetroStats/Bridging.h RetroStats/Info.plist RetroStats/deriveddata.py RetroStats.xcodeproj/project.pbxproj assets/AppIcon.png tests/test_deriveddata.py; do
+for input in RetroStats/main.swift RetroStats/Popover.swift RetroStats/AppDelegate.swift RetroStats/StorageController.swift RetroStats/DashboardView.swift RetroStats/Bridging.h RetroStats/Info.plist RetroStats/deriveddata.py RetroStats.xcodeproj/project.pbxproj assets/AppIcon.png tests/test_deriveddata.py; do
     [ -f "$input" ] || fail "Missing build input: $input"
 done
 printf 'Developer directory: %s\n' "$(xcode-select -p)"
