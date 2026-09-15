@@ -1,4 +1,4 @@
-.PHONY: help doctor verify debug run install test-python
+.PHONY: help doctor verify debug run install
 
 DIR ?= $(HOME)/Applications
 
@@ -11,8 +11,7 @@ help:
 		'make run                       Build, install to ~/Applications, then launch' \
 		'make run DIR=/Applications     Build, install to /Applications, then launch' \
 		'make install                   Build local source then install to ~/Applications' \
-		'make install DIR=/Applications Build local source then install to /Applications' \
-		'make test-python               Cleaner regression tests in temporary directories'
+		'make install DIR=/Applications Build local source then install to /Applications'
 doctor:
 	@./scripts/doctor.sh
 
@@ -28,6 +27,3 @@ run:
 install:
 	@./build.sh
 	@./scripts/deploy-app.sh build/MiniStats.app "$(DIR)"
-
-test-python:
-	@/usr/bin/python3 tests/test_deriveddata.py

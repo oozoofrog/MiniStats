@@ -1,6 +1,6 @@
 import Foundation
 
-struct CacheReport: Decodable {
+struct CacheReport: Codable {
     let generatedAt: Double
     let hours: Int
     let totalBytes: Int64
@@ -18,5 +18,12 @@ struct CacheReport: Decodable {
             throw NSError(domain: "RetroStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "DerivedData 조회 결과가 올바르지 않습니다."])
         }
         return report
+    }
+
+    static func encode(_ report: CacheReport) throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.keyEncodingStrategy = .convertToSnakeCase
+        encoder.outputFormatting = [.sortedKeys]
+        return try encoder.encode(report)
     }
 }

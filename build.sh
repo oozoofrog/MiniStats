@@ -38,5 +38,4 @@ mv "$APP/Contents/Resources/NeoDunggeunmo.woff" "$APP/Contents/Resources/Fonts/"
 mv "$APP/Contents/Resources/LICENSE.txt" "$APP/Contents/Resources/Fonts/" 2>/dev/null || true
 codesign --force --sign - "$APP"
 "$APP/Contents/MacOS/RetroStats" --self-test
-/usr/bin/python3 tests/test_deriveddata.py
 printf 'Built: %s\n' "$APP"

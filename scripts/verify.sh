@@ -21,8 +21,7 @@ set +e
     plutil -lint "$app/Contents/Info.plist"
     codesign --verify --strict "$app"
     lipo -verify_arch arm64 "$app/Contents/MacOS/RetroStats"
-    cmp RetroStats/deriveddata.py "$app/Contents/Resources/deriveddata.py"
-    printf 'PASS: build, Swift self-tests, Python regression tests, bundle/signature/architecture checks.\n'
+    printf 'PASS: build, Swift self-tests, bundle/signature/architecture checks.\n'
 ) >"$log" 2>&1
 status=$?
 set -e

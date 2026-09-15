@@ -1,6 +1,6 @@
 import Foundation
 
-struct CacheEntry: Decodable {
+struct CacheEntry: Codable {
     let path: String
     let size: Int64
     let workspace: String

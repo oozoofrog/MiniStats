@@ -8,8 +8,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 for tool in xcodebuild xcrun sips codesign plutil lipo make; do
     command -v "$tool" >/dev/null 2>&1 || fail "Missing tool: $tool"
 done
-[ -x /usr/bin/python3 ] || fail 'The app requires /usr/bin/python3.'
-for input in RetroStats/main.swift RetroStats/Popover.swift RetroStats/AppDelegate.swift RetroStats/StorageController.swift RetroStats/DashboardView.swift RetroStats/Bridging.h RetroStats/Info.plist RetroStats/deriveddata.py RetroStats.xcodeproj/project.pbxproj assets/AppIcon.png tests/test_deriveddata.py; do
+for input in RetroStats/main.swift RetroStats/Popover.swift RetroStats/AppDelegate.swift RetroStats/StorageController.swift RetroStats/DashboardView.swift RetroStats/Bridging.h RetroStats/Info.plist RetroStats.xcodeproj/project.pbxproj assets/AppIcon.png; do
     [ -f "$input" ] || fail "Missing build input: $input"
 done
 printf 'Developer directory: %s\n' "$(xcode-select -p)"
@@ -21,7 +20,6 @@ esac
 [ "$SDK_MAJOR" -ge 26 ] || fail "macOS 26 SDK or newer is required (found $SDK_VERSION)."
 printf 'macOS SDK: %s\n' "$SDK_VERSION"
 xcodebuild -version
-/usr/bin/python3 --version
 plutil -lint RetroStats/Info.plist
 MIN_OS="$(plutil -extract LSMinimumSystemVersion raw -o - RetroStats/Info.plist)"
 [ "$MIN_OS" = 26.0 ] || fail "Info.plist LSMinimumSystemVersion must be 26.0 (found $MIN_OS)."

@@ -2,8 +2,24 @@ import AppKit
 
 if CommandLine.arguments.contains("--self-test") {
     selfTest()
-    try storageSelfTest()
-    dashboardSelfTest()
+    do {
+        try storageSelfTest()
+        // derivedDataSelfTest is async; drive it with a Task + semaphore. It uses
+        // only TaskGroup/async (no main run loop), so blocking the main thread is safe.
+        let sem = DispatchSemaphore(value: 0)
+        var ddError: Error?
+        Task {
+            do { try await derivedDataSelfTest() } catch let e { ddError = e }
+            sem.signal()
+        }
+        sem.wait()
+        if let ddError { throw ddError }
+        dashboardSelfTest()
+    } catch {
+        FileHandle.standardError.write(Data(("SELF-TEST FAILED: " + String(describing: error) + "\n").utf8))
+        exit(1)
+    }
+    exit(0)
 } else if let index = CommandLine.arguments.firstIndex(of: "--render-dashboard"), CommandLine.arguments.count > index + 1 {
     registerEmbeddedFonts()
     try MainActor.assumeIsolated { try renderDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }

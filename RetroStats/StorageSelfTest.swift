@@ -18,9 +18,8 @@ func storageSelfTest() throws {
     precondition(report.candidates[0].path == "/tmp/테스트")
     let invalid = Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: "2048", with: "-1").utf8)
     precondition((try? CacheReport.decode(invalid)) == nil)
-    precondition(Bundle.main.url(forResource: "deriveddata", withExtension: "py") != nil)
     guard let disk = DiskUsage.read() else { fatalError("Live storage read failed") }
-    print("PASS: storage 49.99/50/50.01% threshold, capacity bounds, purgeable math, DerivedData report validation, bundled cleaner")
+    print("PASS: storage 49.99/50/50.01% threshold, capacity bounds, purgeable math, DerivedData report validation")
     print(disk.description + " · " + (disk.detail ?? "Finder 기준 사용 가능: 없음"))
 }
 
