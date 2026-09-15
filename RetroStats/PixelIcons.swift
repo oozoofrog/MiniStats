@@ -78,33 +78,42 @@ struct PixelSliders: View {
 
 // MARK: - PixelRefresh
 
-/// 3/4 arc with an arrowhead, replacing arrow.clockwise. Rotates clockwise.
+/// 3/4 arc with an arrowhead, replacing arrow.clockwise. When `animating`, a
+/// short run of arc pixels travels clockwise around the ring while the
+/// arrowhead stays fixed; otherwise the full icon is shown statically.
 struct PixelRefresh: View {
     var size: CGFloat = 16
     var color: Color = .primary
-    @State private var rotation: Double = 0
+    var animating: Bool = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        PixelCells(
-            cells: Self.cells,
-            color: color,
-            size: size
-        )
-        .rotationEffect(.degrees(rotation))
-        .onAppear {
-            guard !reduceMotion else { return }
-            withAnimation(.linear(duration: 1.4).repeatForever(autoreverses: false)) {
-                rotation = 360
+        if animating && !reduceMotion {
+            TimelineView(.periodic(from: .now, by: 1.0 / 12.0)) { context in
+                PixelCells(cells: Self.frame(for: context.date), color: color, size: size)
             }
+        } else {
+            PixelCells(cells: Self.cells, color: color, size: size)
         }
     }
 
-    /// Arc cells (open at top) plus a right-side arrowhead.
-    static let cells: [(Int, Int)] = {
-        var c: [(Int, Int)] = []
+    static func frame(for date: Date) -> [(Int, Int)] {
+        let arc = Self.arcCells
+        let count = arc.count
+        let window = max(3, count / 3)
+        let step = Int(date.timeIntervalSinceReferenceDate * 12) % count
+        var active: [(Int, Int)] = []
+        for i in 0..<window {
+            active.append(arc[(step + i) % count])
+        }
+        return active + arrowCells
+    }
+
+    /// Arc cells sorted clockwise starting from the top opening (270°).
+    static let arcCells: [(Int, Int)] = {
         let cx = 7.5, cy = 7.5, rIn = 4.5, rOut = 6.5
         let a0 = 270.0 * .pi / 180, a1 = 570.0 * .pi / 180
+        var keyed: [(Double, Int, Int)] = []
         for j in 0..<Int(PixelGrid.n) {
             for i in 0..<Int(PixelGrid.n) {
                 let dx = Double(i) - cx, dy = Double(j) - cy
@@ -113,12 +122,18 @@ struct PixelRefresh: View {
                 var ang = atan2(dy, dx); if ang < 0 { ang += 2 * .pi }
                 let inArc = a1 <= 2 * .pi ? (ang >= a0 && ang <= a1)
                                           : (ang >= a0 || ang <= (a1 - 2 * .pi))
-                if inArc { c.append((i, j)) }
+                guard inArc else { continue }
+                let order = ang >= a0 ? (ang - a0) : (ang + 2 * .pi - a0)
+                keyed.append((order, i, j))
             }
         }
-        for p in [(8, 0), (8, 1), (8, 2), (9, 1), (10, 1)] { c.append(p) }
-        return c
+        return keyed.sorted { $0.0 < $1.0 }.map { ($0.1, $0.2) }
     }()
+
+    static let arrowCells: [(Int, Int)] = [(8, 0), (8, 1), (8, 2), (9, 1), (10, 1)]
+
+    /// All cells (arc + arrowhead) for static rendering.
+    static let cells: [(Int, Int)] = arcCells + arrowCells
 }
 
 // MARK: - PixelHourglass
@@ -135,23 +150,44 @@ struct PixelHourglass: View {
         if reduceMotion {
             PixelCells(cells: Self.outlineCells, color: color, size: size)
         } else {
-            TimelineView(.periodic(from: .now, by: 1.0 / 8.0)) { context in
+            TimelineView(.periodic(from: .now, by: 1.0 / 16.0)) { context in
                 PixelCells(cells: frame(for: context.date), color: color, size: size)
             }
         }
     }
 
     private func frame(for date: Date) -> [(Int, Int)] {
-        let cycle = Self.topCells.count + Self.botCells.count + 4
+        let total = Self.topCells.count
+        let pause = 6
+        let cycle = total + pause
         let step = Int(date.timeIntervalSinceReferenceDate * 8) % cycle
-        let drain = min(step, Self.topCells.count)
-        let fill = max(0, min(step - Self.topCells.count, Self.botCells.count))
+        let drain = min(step, total)
         var active: [(Int, Int)] = []
-        for (idx, cell) in Self.topCells.enumerated() where idx < Self.topCells.count - drain {
+        // Upper bulb drains top-down: row 1 (wide, top) empties first.
+        for (idx, cell) in Self.topCells.enumerated() where idx >= drain {
             active.append(cell)
         }
-        for (idx, cell) in Self.botCells.enumerated() where idx < fill {
+        // Lower bulb fills bottom-up: row 14 (wide, bottom) fills first,
+        // matching the sand falling from the top in the same step.
+        for (idx, cell) in Self.botCells.enumerated() where idx >= Self.botCells.count - drain {
             active.append(cell)
+        }
+        // Falling stream through the neck gap (rows 6-9 at column 8),
+        // visible only while sand is actively draining. A 2-pixel segment
+        // enters at the top, traverses downward, and exits at the bottom,
+        // then repeats with no gap so the stream never flickers.
+        if drain > 0 && drain < total {
+            let gapRows = [6, 7, 8, 9]
+            let n = gapRows.count
+            let streamLen = 2
+            let cycleLen = n + streamLen - 1
+            let pos = Int(date.timeIntervalSinceReferenceDate * 16) % cycleLen
+            for k in 0..<streamLen {
+                let idx = pos - streamLen + 1 + k
+                if idx >= 0 && idx < n {
+                    active.append((8, gapRows[idx]))
+                }
+            }
         }
         return active
     }
@@ -180,3 +216,59 @@ struct PixelHourglass: View {
 
     static let outlineCells: [(Int, Int)] = topCells + botCells
 }
+
+#if DEBUG
+#Preview("PixelLED") {
+    VStack(spacing: 20) {
+        PixelLED(size: 10, color: .primary)
+        PixelLED(size: 16, color: .primary)
+        PixelLED(size: 24, color: .accentColor)
+    }
+    .padding(40)
+    .frame(width: 200, height: 220)
+}
+
+#Preview("PixelSliders") {
+    VStack(spacing: 20) {
+        PixelSliders(size: 16, color: .primary)
+        PixelSliders(size: 24, color: .primary)
+        PixelSliders(size: 32, color: .accentColor)
+    }
+    .padding(40)
+    .frame(width: 240, height: 240)
+}
+
+#Preview("PixelRefresh — 애니메이션") {
+    VStack(spacing: 28) {
+        PixelRefresh(size: 16, color: .primary, animating: true)
+        Divider().frame(width: 120)
+        PixelRefresh(size: 24, color: .primary, animating: true)
+        Divider().frame(width: 120)
+        PixelRefresh(size: 32, color: .accentColor, animating: true)
+    }
+    .padding(40)
+    .frame(width: 260, height: 280)
+}
+
+#Preview("PixelRefresh — 정지") {
+    VStack(spacing: 28) {
+        PixelRefresh(size: 16, color: .primary, animating: false)
+        Divider().frame(width: 120)
+        PixelRefresh(size: 24, color: .primary, animating: false)
+        Divider().frame(width: 120)
+        PixelRefresh(size: 32, color: .accentColor, animating: false)
+    }
+    .padding(40)
+    .frame(width: 260, height: 280)
+}
+
+#Preview("PixelHourglass") {
+    VStack(spacing: 20) {
+        PixelHourglass(size: 14, color: .primary)
+        PixelHourglass(size: 20, color: .primary)
+        PixelHourglass(size: 32, color: .accentColor)
+    }
+    .padding(40)
+    .frame(width: 240, height: 240)
+}
+#endif

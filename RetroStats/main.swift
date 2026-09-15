@@ -1,6 +1,12 @@
 import AppKit
 
-if CommandLine.arguments.contains("--self-test") {
+if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
+    // Xcode previews: skip the single-instance guard so a stale preview agent
+    // doesn't force a new one to exit(0). The preview host still needs the run
+    // loop, so fall through to NSApplication.shared.run() below without the
+    // accessory policy/delegate setup that starts timers and menu-bar work.
+    NSApplication.shared.run()
+} else if CommandLine.arguments.contains("--self-test") {
     selfTest()
     do {
         try storageSelfTest()

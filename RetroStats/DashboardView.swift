@@ -206,7 +206,7 @@ struct DashboardView: View {
                 }
                 Spacer()
                 if storage?.busy == true { PixelHourglass(size: 14, color: ink) }
-                Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink) }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
+                Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink, animating: storage?.busy == true) }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
             }
             if let progress = storage?.cleanProgress {
                 cleanProgressSection(progress)

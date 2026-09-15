@@ -8,6 +8,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     private(set) var report: CacheReport?
     private(set) var busy = false
     private var task: Task<Void, Never>?
+    #if DEBUG
+    private var previewLocked = false
+    #endif
     private(set) var lastError: String?
     private(set) var cleanProgress: CleanProgress?
     private var timer: Timer?
@@ -237,6 +240,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
 
     private func run(clean: Bool, paths: [String] = []) {
         guard !clean || !paths.isEmpty else { return }
+        #if DEBUG
+        guard !previewLocked else { return }
+        #endif
         busy = true
         cleaning = clean
         lastError = nil
@@ -373,3 +379,29 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         task?.cancel()
     }
 }
+
+#if DEBUG
+extension StorageController {
+    /// Preview-only factory. Builds a controller with injected state and no
+    /// services, and locks `run` so preview interactions never scan or delete
+    /// real DerivedData.
+    static func preview(
+        disk: DiskUsage? = DiskUsage(total: 500_000_000_000, free: 230_000_000_000, name: "Macintosh HD", available: 265_000_000_000),
+        report: CacheReport? = nil,
+        busy: Bool = false,
+        cleaning: Bool = false,
+        lastError: String? = nil,
+        cleanProgress: CleanProgress? = nil
+    ) -> StorageController {
+        let controller = StorageController(changed: {}, openMenu: {}, startServices: false)
+        controller.previewLocked = true
+        controller.disk = disk
+        controller.report = report
+        controller.busy = busy
+        controller.cleaning = cleaning
+        controller.lastError = lastError
+        controller.cleanProgress = cleanProgress
+        return controller
+    }
+}
+#endif
