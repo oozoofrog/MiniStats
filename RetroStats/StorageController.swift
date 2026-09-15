@@ -277,50 +277,54 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 fm.createFile(atPath: errorURL.path, contents: nil)
                 let errors = try FileHandle(forWritingTo: errorURL)
                 defer { try? errors.close() }
-                let stdoutPipe: Pipe? = clean ? Pipe() : nil
-                if let stdoutPipe {
-                    process.standardOutput = stdoutPipe
-                } else {
-                    let outputURL = temporary.appendingPathComponent("stdout")
-                    fm.createFile(atPath: outputURL.path, contents: nil)
-                    let output = try FileHandle(forWritingTo: outputURL)
-                    defer { try? output.close() }
-                    // Files avoid pipe-buffer deadlocks during a long scan.
-                    process.standardOutput = output
-                }
+                let outputURL = temporary.appendingPathComponent("stdout")
+                fm.createFile(atPath: outputURL.path, contents: nil)
+                let output = try FileHandle(forWritingTo: outputURL)
+                defer { try? output.close() }
+                // File-based stdout (not a Pipe). A Pipe as standardOutput triggered
+                // Foundation's NSBackgroundActivityScheduler launch path inside an app
+                // process and crashed in launchWithDictionary with
+                // NSFileHandleOperationException. The scan path already used a file and
+                // did not crash, so clean now matches it.
+                process.standardOutput = output
                 process.standardError = errors
+                try process.run()
                 var collectedLines: [String] = []
-                if let stdoutPipe {
-                    let readHandle = stdoutPipe.fileHandleForReading
-                    let readGroup = DispatchGroup()
-                    readGroup.enter()
-                    DispatchQueue.global(qos: .utility).async {
-                        var lineBuffer = Data()
-                        while true {
-                            let chunk = readHandle.availableData
-                            if chunk.isEmpty { break }
-                            lineBuffer.append(chunk)
-                            while let nl = lineBuffer.firstIndex(of: 0x0A) {
-                                let line = String(data: lineBuffer.subdata(in: 0..<nl), encoding: .utf8) ?? ""
-                                lineBuffer.removeSubrange(0...nl)
-                                collectedLines.append(line)
-                                self.handleCleanLine(line)
-                            }
+                if clean {
+                    // Live progress: tail the stdout file for complete lines as the
+                    // child writes them, without a Pipe.
+                    let readHandle = try FileHandle(forReadingFrom: outputURL)
+                    defer { try? readHandle.close() }
+                    var lineBuffer = Data()
+                    while process.isRunning {
+                        let chunk = readHandle.availableData
+                        if chunk.isEmpty {
+                            Thread.sleep(forTimeInterval: 0.01)
+                            continue
                         }
-                        if !lineBuffer.isEmpty {
-                            let line = String(data: lineBuffer, encoding: .utf8) ?? ""
+                        lineBuffer.append(chunk)
+                        while let nl = lineBuffer.firstIndex(of: 0x0A) {
+                            let line = String(data: lineBuffer.subdata(in: 0..<nl), encoding: .utf8) ?? ""
+                            lineBuffer.removeSubrange(0...nl)
                             collectedLines.append(line)
                             self.handleCleanLine(line)
                         }
-                        readGroup.leave()
                     }
-                    try process.run()
-                    process.waitUntilExit()
-                    readGroup.wait()
-                } else {
-                    try process.run()
-                    process.waitUntilExit()
+                    // Drain trailing output written before exit was observed.
+                    lineBuffer.append(readHandle.readDataToEndOfFile())
+                    while let nl = lineBuffer.firstIndex(of: 0x0A) {
+                        let line = String(data: lineBuffer.subdata(in: 0..<nl), encoding: .utf8) ?? ""
+                        lineBuffer.removeSubrange(0...nl)
+                        collectedLines.append(line)
+                        self.handleCleanLine(line)
+                    }
+                    if !lineBuffer.isEmpty {
+                        let line = String(data: lineBuffer, encoding: .utf8) ?? ""
+                        collectedLines.append(line)
+                        self.handleCleanLine(line)
+                    }
                 }
+                process.waitUntilExit()
                 let stderr = try String(contentsOf: errorURL, encoding: .utf8)
                 if clean {
                     let stdout = collectedLines.joined(separator: "\n")
