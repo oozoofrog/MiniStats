@@ -32,9 +32,9 @@ struct DashboardView: View {
                 Spacer()
                 if model.page == .overview {
                     Text("실시간").font(.pixel(12)).foregroundStyle(.secondary)
-                    Circle().fill(ink).frame(width: 5, height: 5).accessibilityHidden(true)
+                    PixelLED(size: 10, color: ink)
                 }
-                Button { model.refreshContext(); model.page = .settings } label: { PixelGear(size: 18).foregroundStyle(ink).frame(width: 26, height: 26) }
+                Button { model.refreshContext(); model.page = .settings } label: { PixelSliders(size: 18, color: ink).frame(width: 26, height: 26) }
                     .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
             }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 16)
             if renderOnly {
@@ -106,7 +106,7 @@ struct DashboardView: View {
             HStack {
                 Text(model.battery).font(.pixel(11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("활성 상태 보기") { openActivityMonitor() }.font(.pixel(11)).buttonStyle(.plain).foregroundStyle(ink)
+                Button("활성 상태 보기") { openActivityMonitor() }.font(.pixel(11)).buttonStyle(.pixelGhost)
             }
         }
     }
@@ -184,7 +184,7 @@ struct DashboardView: View {
             }
             Text(model.order == .cpu ? "접근 가능한 프로세스만 표시합니다. 프로세스 CPU 100%는 코어 1개 기준으로, 여러 코어를 사용하면 100%를 넘을 수 있습니다." : "접근 가능한 프로세스만 표시합니다. 메모리는 활성 상태 보기의 메모리 열과 같은 기준입니다.")
                 .font(.pixel(10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Button("활성 상태 보기 열기") { openActivityMonitor() }.controlSize(.small)
+            Button("활성 상태 보기 열기") { openActivityMonitor() }.buttonStyle(.pixelGhost).controlSize(.small)
         }
     }
     private var storageDetails: some View {
@@ -206,7 +206,7 @@ struct DashboardView: View {
                 }
                 Spacer()
                 if storage?.busy == true { ProgressView().controlSize(.small) }
-                Button { storage?.refresh() } label: { Image(systemName: "arrow.clockwise") }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
+                Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink) }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
             }
             if let progress = storage?.cleanProgress {
                 cleanProgressSection(progress)
@@ -219,7 +219,7 @@ struct DashboardView: View {
                         Spacer()
                         Button(selection.count == candidatePaths.count && !selection.isEmpty ? "선택 해제" : "모두 선택") {
                             selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
-                        }.buttonStyle(.plain).foregroundStyle(ink).disabled(storage?.busy == true || candidatePaths.isEmpty)
+                        }.buttonStyle(.pixelGhost).disabled(storage?.busy == true || candidatePaths.isEmpty)
                     }.font(.pixel(11))
                     if report.candidates.isEmpty { Text("지금 정리할 오래된 캐시가 없습니다.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
                     ForEach(report.candidates, id: \.path) { entry in
@@ -229,7 +229,7 @@ struct DashboardView: View {
                                     Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11))
                                     Text(bytes(UInt64(entry.size))).font(.pixel(10)).foregroundStyle(.secondary)
                                 }
-                            }.toggleStyle(.checkbox).disabled(storage?.busy == true).help(entry.path)
+                            }.toggleStyle(.pixelToggle).disabled(storage?.busy == true).help(entry.path)
                             Spacer(minLength: 0)
                             Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) } label: { Image(systemName: "folder") }
                                 .buttonStyle(.plain).help("Finder에서 보기").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Finder에서 보기")
@@ -349,7 +349,7 @@ struct DashboardView: View {
             if storage?.cleanProgress?.phase == .confirming {
                 Button { storage?.confirmCleanRun() } label: {
                     Text("삭제 실행").frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent)
+                }.buttonStyle(.pixelPrimary)
                 Button { storage?.cancelClean() } label: {
                     Text("취소").frame(maxWidth: .infinity)
                 }
@@ -357,27 +357,28 @@ struct DashboardView: View {
             } else if storage?.cleanProgress?.phase == .running {
                 Button { storage?.cancelClean() } label: {
                     Text("정리 취소").frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent)
+                }.buttonStyle(.pixelPrimary)
                 Text("정리 중에는 새 빌드를 시작하지 마세요. 취소하면 진행 중인 항목까지만 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
             } else if let phase = storage?.cleanProgress?.phase, phase == .done || phase == .cancelled || phase == .failed {
                 Button { storage?.dismissCleanProgress(); storage?.refresh() } label: {
                     Text("다시 조회").frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent)
+                }.buttonStyle(.pixelPrimary)
             } else {
                 Toggle("공용 캐시 포함", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
-                    .font(.pixel(11)).disabled(storage?.busy == true)
+                    .toggleStyle(.pixelToggle).font(.pixel(11)).disabled(storage?.busy == true)
                 Button { storage?.beginClean(paths: Set(selectedEntries.map(\.path))) } label: {
                     Text("선택한 \(selectedEntries.count)개 정리 · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
-                }.buttonStyle(.borderedProminent).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
+                }.buttonStyle(.pixelPrimary).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
                 Text("정리하려면 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
             }
         }
+        .buttonStyle(.pixel)
     }
     private var settings: some View {
         VStack(alignment: .leading, spacing: 18) {
             Toggle("로그인 시 자동 실행", isOn: Binding(get: { model.loginEnabled }, set: { _ in model.toggleLogin?(); model.refreshContext() }))
-                .toggleStyle(.switch).controlSize(.small)
-            if model.loginApproval { Button("시스템 설정에서 자동 실행 승인") { SMAppService.openSystemSettingsLoginItems() } }
+                .toggleStyle(.pixelToggle)
+            if model.loginApproval { Button("시스템 설정에서 자동 실행 승인") { SMAppService.openSystemSettingsLoginItems() }.buttonStyle(.pixel) }
             Divider()
             Button("스토리지 알림 설정…") { storage?.openNotificationSettings() }
             Button("DerivedData 폴더 열기") { storage?.openFolder() }
@@ -386,7 +387,7 @@ struct DashboardView: View {
             Text("화면 모양은 macOS의 밝은 모드·어두운 모드 및 손쉬운 사용 설정을 따릅니다.").font(.pixel(11)).foregroundStyle(.secondary)
             Divider()
             Button("RetroStats 종료") { model.quit?() }.disabled(storage?.cleaning == true)
-        }.buttonStyle(.borderless)
+        }.buttonStyle(.pixelGhost)
     }
     private func processValue(_ process: RankedProcess, order: ProcessOrder) -> String {
         order == .cpu ? process.cpu.map { String(format: "%.1f%%", $0) } ?? "—" : bytes(process.memory)
