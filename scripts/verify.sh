@@ -2,8 +2,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 case "${1:-}" in
-    '') mode=release; app=build/MiniStats.app ;;
-    --debug) mode=debug; app=build/debug/MiniStats.app ;;
+    '') mode=release; app=build/RetroStats.app ;;
+    --debug) mode=debug; app=build/debug/RetroStats.app ;;
     *) printf 'Usage: %s [--debug]\n' "$0" >&2; exit 2 ;;
 esac
 [ "$#" -le 1 ] || { printf 'Too many arguments\n' >&2; exit 2; }
@@ -11,7 +11,6 @@ mkdir -p build/logs
 log=$(mktemp "$PWD/build/logs/verify-$mode-$(date '+%Y%m%d-%H%M%S').XXXXXX")
 printf 'Verification log: %s\n' "$log"
 
-# A subshell with set -e preserves failures without a pipeline hiding the exit code.
 set +e
 (
     set -eu
@@ -21,8 +20,8 @@ set +e
     ./build.sh "$@"
     plutil -lint "$app/Contents/Info.plist"
     codesign --verify --strict "$app"
-    lipo -verify_arch arm64 "$app/Contents/MacOS/MiniStats"
-    cmp deriveddata.py "$app/Contents/Resources/deriveddata.py"
+    lipo -verify_arch arm64 "$app/Contents/MacOS/RetroStats"
+    cmp RetroStats/deriveddata.py "$app/Contents/Resources/deriveddata.py"
     printf 'PASS: build, Swift self-tests, Python regression tests, bundle/signature/architecture checks.\n'
 ) >"$log" 2>&1
 status=$?

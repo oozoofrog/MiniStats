@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-<key>CFBundleExecutable</key><string>MiniStats</string>
-<key>CFBundleIdentifier</key><string>local.jay.MiniStats</string>
-<key>CFBundleName</key><string>MiniStats</string>
-<key>CFBundleDisplayName</key><string>MiniStats</string>
+<key>CFBundleExecutable</key><string>RetroStats</string>
+<key>CFBundleIdentifier</key><string>local.jay.RetroStats</string>
+<key>CFBundleName</key><string>RetroStats</string>
+<key>CFBundleDisplayName</key><string>RetroStats</string>
 <key>CFBundleIconFile</key><string>AppIcon</string>
 <key>CFBundlePackageType</key><string>APPL</string>
 <key>CFBundleShortVersionString</key><string>1.1</string>

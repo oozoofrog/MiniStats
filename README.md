@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/AppIcon.png" width="96" alt="MiniStats 앱 아이콘">
+  <img src="assets/AppIcon.png" width="96" alt="RetroStats 앱 아이콘">
 </p>
 
-# MiniStats
+# RetroStats
 
 **메뉴바에서 Mac의 CPU·메모리를 모니터링하고, 오래된 DerivedData를 골라 정리합니다.**
 
@@ -16,7 +16,7 @@ Apple Silicon, macOS 26 이상에서 한 줄 설치:
 curl -fsSL https://raw.githubusercontent.com/oozoofrog/MiniStats/main/scripts/install.sh | sh
 ```
 
-기본 설치 경로는 `~/Applications/MiniStats.app`이다. 설치 스크립트가 저장소를 클론하고 빌드·자체 검사를 거쳐 앱을 복사한다. 소스에서 직접 빌드하므로 공증(notarization)은 되어 있지 않다. 첫 실행 시 Gatekeeper 경고가 나면 앱을 우클릭하고 "열기"를 선택한다.
+기본 설치 경로는 `~/Applications/RetroStats.app`이다. 설치 스크립트가 저장소를 클론하고 빌드·자체 검사를 거쳐 앱을 복사한다. 소스에서 직접 빌드하므로 공증(notarization)은 되어 있지 않다. 첫 실행 시 Gatekeeper 경고가 나면 앱을 우클릭하고 "열기"를 선택한다.
 
 ## 주요 기능
 
@@ -30,12 +30,12 @@ macOS 26 이상에서 네이티브 Liquid Glass(`NSGlassEffectView`)를 사용�
 ## 빌드와 실행
 
 - 실행: Apple Silicon, macOS 26 이상, `/usr/bin/python3`
-- 빌드: macOS 26 SDK 이상을 포함한 Xcode 또는 Command Line Tools
+- 빌드: macOS 26 SDK 이상을 포함한 Xcode
 
 ```sh
 git submodule update --init --recursive
 make verify
-open build/MiniStats.app
+open build/RetroStats.app
 ```
 
 ## 라이센스

@@ -1,6 +1,6 @@
-# MiniStats 개발 지침
+# RetroStats 개발 지침
 
-Apple Silicon / macOS 26+ 메뉴바 앱. AppKit·SwiftUI Swift 네 파일을 `swiftc`로 직접 빌드한다. 외부 패키지, Xcode 프로젝트, Swift Package는 없다.
+Apple Silicon / macOS 26+ 메뉴바 앱. AppKit·SwiftUI Swift 네 파일을 `RetroStats.xcodeproj`에서 `xcodebuild`로 빌드한다. 외부 Swift 패키지는 없다.
 
 ## 작업 시작
 
@@ -13,7 +13,7 @@ Apple Silicon / macOS 26+ 메뉴바 앱. AppKit·SwiftUI Swift 네 파일을 `sw
 
 - 환경 문제는 `make doctor`. Swift·리소스·빌드 변경 완료 시 `make verify`를 실행한다. 디버거용 앱은 `make debug`.
 - Python만 변경하면 `make test-python`; 앱 연동·패키징도 바뀌면 `make verify`까지 실행한다. 문서만 수정하면 경로·명령의 정확성을 확인한다.
-- Swift 계산 검사는 `main.swift`의 `selfTest()`, 저장소 검사는 `Storage.swift`의 `storageSelfTest()`, 삭제 보호 검사는 `tests/test_deriveddata.py`에 있다. 동작 변경 시 관련 회귀 검사를 유지·보강한다.
+- Swift 계산 검사는 `RetroStats/main.swift`의 `selfTest()`, 저장소 검사는 `RetroStats/Storage.swift`의 `storageSelfTest()`, 삭제 보호 검사는 `tests/test_deriveddata.py`에 있다. 동작 변경 시 관련 회귀 검사를 유지·보강한다.
 - 실제 DerivedData를 테스트 대상으로 삭제하지 않는다. 삭제 검증은 임시 디렉터리에서 한다. 8시간 기준, 사용 중 차단, 경로 재검증, 심볼릭 링크·미확인 항목 보호를 유지한다.
 - 앱 실행은 알림 권한 요청·로그인 항목 등록을 일으킬 수 있다. 자동 검증에는 `--self-test`만 사용하고, UI 실행·설치·로그인 항목 검증은 요청 범위에 맞게 별도로 수행한다.
 - 성공한 검증은 관련 입력이 바뀌거나 새 실패가 발생했을 때 다시 실행한다. 결과는 소스 확인, 빌드/자체 검사, GUI 실행, 설치로 구분하고 실패와 전체 로그 경로를 보고한다.

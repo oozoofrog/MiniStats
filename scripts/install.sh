@@ -3,7 +3,7 @@ set -eu
 
 REPO="https://github.com/oozoofrog/MiniStats.git"
 INSTALL_DIR="${1:-$HOME/Applications}"
-LOG_FILE="${TMPDIR:-/tmp}/ministats-install.log"
+LOG_FILE="${TMPDIR:-/tmp}/retrostats-install.log"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 
@@ -17,19 +17,19 @@ command -v xcrun >/dev/null 2>&1 || fail 'Xcode or Command Line Tools are requir
 WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
-printf 'Cloning MiniStats into %s\n' "$WORKDIR"
-git clone --recurse-submodules --depth 1 "$REPO" "$WORKDIR/MiniStats"
+printf 'Cloning RetroStats into %s\n' "$WORKDIR"
+git clone --recurse-submodules --depth 1 "$REPO" "$WORKDIR/RetroStats"
 
 printf 'Building and running self-tests (log: %s)\n' "$LOG_FILE"
-if ! ( cd "$WORKDIR/MiniStats" && make verify ) >"$LOG_FILE" 2>&1; then
+if ! ( cd "$WORKDIR/RetroStats" && make verify ) >"$LOG_FILE" 2>&1; then
     printf 'Build failed. Last lines:\n' >&2
     tail -20 "$LOG_FILE" >&2
     printf 'Full log: %s\n' "$LOG_FILE" >&2
     exit 1
 fi
 
-APP="$WORKDIR/MiniStats/build/MiniStats.app"
+APP="$WORKDIR/RetroStats/build/RetroStats.app"
 [ -d "$APP" ] || fail "Built app not found: $APP"
 
-"$WORKDIR/MiniStats/scripts/deploy-app.sh" "$APP" "$INSTALL_DIR"
-printf 'Open with: open "%s/MiniStats.app"\n' "$INSTALL_DIR"
+"$WORKDIR/RetroStats/scripts/deploy-app.sh" "$APP" "$INSTALL_DIR"
+printf 'Open with: open "%s/RetroStats.app"\n' "$INSTALL_DIR"

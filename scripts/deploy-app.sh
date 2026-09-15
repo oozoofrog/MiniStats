@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-APP_NAME="MiniStats.app"
+APP_NAME="RetroStats.app"
 SOURCE_APP="${1:-}"
 INSTALL_DIR="${2:-$HOME/Applications}"
 LAUNCH_MODE="${3:-}"
@@ -17,8 +17,6 @@ esac
 command -v ditto >/dev/null 2>&1 || fail 'ditto is required.'
 command -v open >/dev/null 2>&1 || fail 'open is required.'
 
-# Prefer an unprivileged install. Fall back to sudo only when the destination
-# itself is not writable (for example /Applications on a standard setup).
 NEEDS_SUDO=0
 if [ -d "$INSTALL_DIR" ]; then
     [ -w "$INSTALL_DIR" ] || NEEDS_SUDO=1
@@ -42,31 +40,29 @@ as_installer() {
     fi
 }
 
-# The app intentionally exits if another process with the same bundle ID is
-# already running, so stop the installed/current instance before replacement.
-if pgrep -x MiniStats >/dev/null 2>&1; then
-    printf 'Stopping running MiniStats…\n'
-    pkill -x MiniStats || true
+if pgrep -x RetroStats >/dev/null 2>&1; then
+    printf 'Stopping running RetroStats…\n'
+    pkill -x RetroStats || true
     i=0
-    while pgrep -x MiniStats >/dev/null 2>&1 && [ "$i" -lt 50 ]; do
+    while pgrep -x RetroStats >/dev/null 2>&1 && [ "$i" -lt 50 ]; do
         sleep 0.1
         i=$((i + 1))
     done
-    if pgrep -x MiniStats >/dev/null 2>&1; then
-        printf 'MiniStats did not terminate; forcing termination…\n'
-        pkill -KILL -x MiniStats || true
+    if pgrep -x RetroStats >/dev/null 2>&1; then
+        printf 'RetroStats did not terminate; forcing termination…\n'
+        pkill -KILL -x RetroStats || true
         i=0
-        while pgrep -x MiniStats >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
+        while pgrep -x RetroStats >/dev/null 2>&1 && [ "$i" -lt 20 ]; do
             sleep 0.1
             i=$((i + 1))
         done
     fi
-    pgrep -x MiniStats >/dev/null 2>&1 && fail 'Failed to stop running MiniStats.'
+    pgrep -x RetroStats >/dev/null 2>&1 && fail 'Failed to stop running RetroStats.'
 fi
 
 TARGET="$INSTALL_DIR/$APP_NAME"
-TEMP_TARGET="$INSTALL_DIR/.MiniStats.installing.$$"
-BACKUP_TARGET="$INSTALL_DIR/.MiniStats.previous.$$"
+TEMP_TARGET="$INSTALL_DIR/.RetroStats.installing.$$"
+BACKUP_TARGET="$INSTALL_DIR/.RetroStats.previous.$$"
 
 rollback() {
     as_installer rm -rf "$TEMP_TARGET" >/dev/null 2>&1 || true
@@ -78,8 +74,6 @@ rollback() {
 }
 trap rollback EXIT HUP INT TERM
 
-# Copy completely before touching the current installation. This prevents a
-# failed ditto from leaving a partially copied app in the canonical location.
 as_installer rm -rf "$TEMP_TARGET" "$BACKUP_TARGET"
 as_installer ditto "$SOURCE_APP" "$TEMP_TARGET"
 

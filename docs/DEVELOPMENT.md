@@ -1,8 +1,8 @@
-# MiniStats 개발 환경
+# RetroStats 개발 환경
 
 ## 시작
 
-프로젝트 루트에서 다음 명령을 사용한다. Xcode 또는 Command Line Tools가 설치된 Apple Silicon Mac이 필요하다. 시스템 Python(`/usr/bin/python3`)의 표준 라이브러리만 사용하며 패키지 설치 단계는 없다.
+프로젝트 루트에서 다음 명령을 사용한다. macOS 26 SDK 이상을 포함한 Xcode가 설치된 Apple Silicon Mac이 필요하다. 시스템 Python(`/usr/bin/python3`)의 표준 라이브러리만 사용하며 패키지 설치 단계는 없다.
 
 ```sh
 make doctor
@@ -20,8 +20,8 @@ git submodule update --init --recursive
 | 명령 | 결과 |
 | --- | --- |
 | `make doctor` | 도구·SDK·필수 입력·Git 경계 확인. 컴파일하지 않음 |
-| `make verify` | `build/MiniStats.app` 생성과 전체 검증, 로그 저장 |
-| `make debug` | `-Onone -g`로 `build/debug/MiniStats.app` 생성과 동일 검증 |
+| `make verify` | `build/RetroStats.app` 생성과 전체 검증, 로그 저장 |
+| `make debug` | Debug 구성으로 `build/debug/RetroStats.app` 생성과 동일 검증 |
 | `make test-python` | 임시 폴더에서 정리 도구 회귀 검사 |
 | `./build.sh` | 기존 릴리스 빌드·서명·Swift/Python 검사 |
 
@@ -31,33 +31,33 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 
 | 작업 | 먼저 볼 파일과 심볼 |
 | --- | --- |
-| CPU·메모리·네트워크 계산, 프로세스 순위 | `main.swift`: `cpuLoad`, `memoryUsage`, `topCPU`, `parseNetwork`, `networkRate` |
-| 메뉴바·자동 실행 | `main.swift`: `AppDelegate`, `StatusReadout` |
-| 투명 팝오버 패널 | `Popover.swift`: `TransparentPopover` |
-| 디스크 경고·알림·정리 확인·Python 실행 | `Storage.swift`: `DiskUsage`, `CacheReport`, `StorageController` |
-| DerivedData 조회·삭제 보호 | `deriveddata.py`: `inspect`, `eligible`, `ensure_idle`, `clean`, `main` |
-| 대시보드·상위 프로세스·스토리지 선택 UI | `Dashboard.swift`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
-| Swift 회귀 검사 | `main.swift`: `selfTest`; `Storage.swift`: `storageSelfTest`; `Dashboard.swift`: `dashboardSelfTest` |
+| CPU·메모리·네트워크 계산, 프로세스 순위 | `RetroStats/main.swift`: `cpuLoad`, `memoryUsage`, `topCPU`, `parseNetwork`, `networkRate` |
+| 메뉴바·자동 실행 | `RetroStats/main.swift`: `AppDelegate`, `StatusReadout` |
+| 투명 팝오버 패널 | `RetroStats/Popover.swift`: `TransparentPopover` |
+| 디스크 경고·알림·정리 확인·Python 실행 | `RetroStats/Storage.swift`: `DiskUsage`, `CacheReport`, `StorageController` |
+| DerivedData 조회·삭제 보호 | `RetroStats/deriveddata.py`: `inspect`, `eligible`, `ensure_idle`, `clean`, `main` |
+| 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard.swift`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
+| Swift 회귀 검사 | `RetroStats/main.swift`: `selfTest`; `RetroStats/Storage.swift`: `storageSelfTest`; `RetroStats/Dashboard.swift`: `dashboardSelfTest` |
 | 삭제·보존·동시 작업 회귀 검사 | `tests/test_deriveddata.py` |
-| 타깃·프레임워크·패키징 | `build.sh`, `Info.plist`, `Bridging.h`, `assets/AppIcon.png` |
+| 타깃·프레임워크·패키징 | `RetroStats.xcodeproj/project.pbxproj`, `build.sh`, `RetroStats/Info.plist`, `RetroStats/Bridging.h`, `assets/AppIcon.png` |
 
-새 Swift 파일을 추가하면 `build.sh`의 컴파일 입력에도 추가한다. 현재 빌드는 `arm64-apple-macos26.0`이며 AppKit, SwiftUI(자동 링크), IOKit, ServiceManagement, UserNotifications를 링크한다. 번들 식별자는 `Info.plist`의 `local.jay.MiniStats`다. 이름에 사용자 문자열이 있어도 단순 환경 정리 과정에서 변경하지 않는다. 기존 알림·로그인 항목과 연결될 수 있다.
+소스 파일은 `RetroStats/` 폴더에 있으며 `RetroStats.xcodeproj`의 `PBXFileSystemSynchronizedRootGroup`이 자동으로 추적한다. 새 Swift 파일을 `RetroStats/`에 추가하면 빌드에 자동으로 포함된다. 빌드는 `xcodebuild`로 `arm64-apple-macos26.0`을 타깃으로 하며 AppKit, SwiftUI(자동 링크), IOKit, ServiceManagement, UserNotifications를 링크한다. 번들 식별자는 `RetroStats/Info.plist`의 `local.jay.RetroStats`다. App Sandbox는 꺼져 있으며 서브프로세스 실행과 DerivedData 삭제에 필요하다.
 
 ## GUI와 설치 검증
 
-앱을 직접 실행하기 전 기존 MiniStats를 메뉴에서 종료한다. 같은 번들 식별자의 앱이 실행 중이면 새 앱은 종료하므로, 실행 명령 성공만으로 새 빌드를 확인했다고 판단하지 않는다.
+앱을 직접 실행하기 전 기존 RetroStats를 메뉴에서 종료한다. 같은 번들 식별자의 앱이 실행 중이면 새 앱은 종료하므로, 실행 명령 성공만으로 새 빌드를 확인했다고 판단하지 않는다.
 
 ```sh
-open build/MiniStats.app --args --show-dashboard
+open build/RetroStats.app --args --show-dashboard
 # 55% 스토리지 경고를 미리 보려면 종료한 뒤:
-open build/MiniStats.app --args --preview-storage-warning
+open build/RetroStats.app --args --preview-storage-warning
 ```
 
 GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으킬 수 있다. 경고 미리보기도 앱 실행이므로 이러한 부수 효과가 있다. 메뉴바 수치·정렬, 메뉴 갱신, 알림과 재실행 상태, 로그인 실행은 GUI에서 별도로 확인한다. 실제 캐시 삭제는 개발 환경 검증 절차에 포함하지 않는다.
 
-디버깅은 `make debug` 후 `lldb build/debug/MiniStats.app/Contents/MacOS/MiniStats`로 시작할 수 있다. GUI를 시작하지 않고 자체 검사를 디버깅하려면 LLDB에서 `run --self-test`를 사용한다.
+디버깅은 `make debug` 후 `lldb build/debug/RetroStats.app/Contents/MacOS/RetroStats`로 시작할 수 있다. GUI를 시작하지 않고 자체 검사를 디버깅하려면 LLDB에서 `run --self-test`를 사용한다.
 
-수동 설치 대상은 사용자가 선택한다(예: `~/Applications/MiniStats.app`). 빌드 명령은 앱을 설치하거나 기존 설치본을 덮어쓰지 않는다.
+수동 설치 대상은 사용자가 선택한다(예: `~/Applications/RetroStats.app`). 빌드 명령은 앱을 설치하거나 기존 설치본을 덮어쓰지 않는다.
 
 ## Astra에 전달할 컨텍스트
 

@@ -31,7 +31,7 @@ func diagnostic(_ message: String) {
     if let handle = FileHandle(forWritingAtPath: path) { defer { try? handle.close() }; _ = try? handle.seekToEnd(); try? handle.write(contentsOf: data) }
 }
 
-let appID = "local.jay.MiniStats"
+let appID = "local.jay.RetroStats"
 let totalMemory = ProcessInfo.processInfo.physicalMemory
 let hostPort = mach_host_self()
 
@@ -255,7 +255,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         registerEmbeddedFonts()
-        status.autosaveName = "MiniStats"
+        status.autosaveName = "RetroStats"
         readout.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
         readout.alignment = .center
         readout.setAccessibilityElement(false)
@@ -275,7 +275,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 warningIcon.heightAnchor.constraint(equalToConstant: 16)
             ])
         }
-        status.button?.setAccessibilityLabel("MiniStats 시스템 모니터")
+        status.button?.setAccessibilityLabel("RetroStats 시스템 모니터")
         storage = StorageController(changed: { [weak self] in self?.updateStorageWarning() }, openMenu: { [weak self] in self?.showStorageMenu() })
         dashboard.storage = storage
         dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }

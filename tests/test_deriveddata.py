@@ -17,7 +17,7 @@ import time
 from unittest.mock import patch
 
 
-loader = SourceFileLoader("deriveddata", str(Path(__file__).resolve().parents[1] / "deriveddata.py"))
+loader = SourceFileLoader("deriveddata", str(Path(__file__).resolve().parents[1] / "RetroStats" / "deriveddata.py"))
 spec = spec_from_loader(loader.name, loader)
 dd = module_from_spec(spec)
 sys.modules[loader.name] = dd

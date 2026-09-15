@@ -52,7 +52,7 @@ struct CacheReport: Decodable {
         guard report.hours == 8, report.generatedAt.isFinite,
               report.totalBytes >= 0, report.candidateBytes >= 0,
               report.items.allSatisfy({ $0.size >= 0 && $0.path.hasPrefix("/") }) else {
-            throw NSError(domain: "MiniStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "DerivedData 조회 결과가 올바르지 않습니다."])
+            throw NSError(domain: "RetroStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "DerivedData 조회 결과가 올바르지 않습니다."])
         }
         return report
     }
@@ -94,7 +94,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     private var notificationsAllowed = false
     private var notificationError: String?
     private let defaults = UserDefaults.standard
-    private let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/MiniStats")
+    private let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/RetroStats")
     private let changed: () -> Void
     private let openMenu: () -> Void
     private let preview = CommandLine.arguments.contains("--preview-storage-warning")
@@ -169,7 +169,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 }
                 let content = UNMutableNotificationContent()
                 content.title = self.preview ? "테스트 · 스토리지 정리 알림" : "스토리지 50% 이상 사용"
-                content.body = String(format: "현재 %.1f%% 사용 중입니다. MiniStats의 ‘스토리지 정리’에서 오래된 DerivedData를 확인하고 정리하세요.", disk.percent)
+                content.body = String(format: "현재 %.1f%% 사용 중입니다. RetroStats의 ‘스토리지 정리’에서 오래된 DerivedData를 확인하고 정리하세요.", disk.percent)
                 content.categoryIdentifier = "storage"
                 center.add(UNNotificationRequest(identifier: self.notificationID, content: content, trigger: nil)) { error in
                     DispatchQueue.main.async {
@@ -247,7 +247,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     }
 
     @objc func openNotificationSettings() {
-        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=local.jay.MiniStats")!)
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=local.jay.RetroStats")!)
     }
 
     @objc func refresh() {
@@ -316,7 +316,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     private func run(clean: Bool, paths: [String] = []) {
         guard !clean || !paths.isEmpty else { return }
         guard let script = Bundle.main.url(forResource: "deriveddata", withExtension: "py") else {
-            lastError = "앱에 DerivedData 정리 도구가 없습니다. MiniStats를 다시 빌드하세요."
+            lastError = "앱에 DerivedData 정리 도구가 없습니다. RetroStats를 다시 빌드하세요."
             rebuildMenu()
             changed()
             return

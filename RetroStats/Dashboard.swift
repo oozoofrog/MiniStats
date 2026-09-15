@@ -58,7 +58,7 @@ final class DashboardModel: ObservableObject {
     var quit: (() -> Void)?
     private let readProcesses: () -> [pid_t: ProcessSample]
     init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples) { self.readProcesses = readProcesses }
-    private let queue = DispatchQueue(label: "MiniStats.processes", qos: .utility)
+    private let queue = DispatchQueue(label: "RetroStats.processes", qos: .utility)
     private var previous: [pid_t: ProcessSample] = [:]
     private var previousTime: Double?
     private var generation = 0
@@ -318,7 +318,7 @@ struct DashboardView: View {
     private var candidatePaths: [String] { storage?.report?.candidates.map(\.path) ?? [] }
     private var title: String {
         switch model.page {
-        case .overview: return "MiniStats"
+        case .overview: return "RetroStats"
         case .processes: return "프로세스"
         case .storage: return "스토리지 정리"
         case .settings: return "설정"
@@ -691,7 +691,7 @@ struct DashboardView: View {
             Text("디스크는 1분마다, 캐시 용량은 1시간마다 확인합니다. 정리는 직접 실행할 때만 진행합니다.").font(.pixel(11)).foregroundStyle(.secondary)
             Text("화면 모양은 macOS의 밝은 모드·어두운 모드 및 손쉬운 사용 설정을 따릅니다.").font(.pixel(11)).foregroundStyle(.secondary)
             Divider()
-            Button("MiniStats 종료") { model.quit?() }.disabled(storage?.cleaning == true)
+            Button("RetroStats 종료") { model.quit?() }.disabled(storage?.cleaning == true)
         }.buttonStyle(.borderless)
     }
     private func processValue(_ process: RankedProcess, order: ProcessOrder) -> String {
@@ -803,7 +803,7 @@ func dashboardSelfTest() {
     let ties = rankedProcesses(before: [:], after: [8: current, 4: current], seconds: 0)
     precondition(ProcessOrder.memory.sorted(ties).map(\.pid) == [4, 8])
     precondition(rows.first(where: { $0.pid == 2 })?.id == "2:2")
-    let background = DispatchQueue(label: "MiniStats.selftest").sync { processSamples() }
+    let background = DispatchQueue(label: "RetroStats.selftest").sync { processSamples() }
     precondition((background[getpid()]?.memory ?? 0) > 0, "Background libproc sampling failed")
     let model = DashboardModel(readProcesses: { [1: current] })
     model.begin()
