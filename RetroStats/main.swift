@@ -21,6 +21,7 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
         sem.wait()
         if let ddError { throw ddError }
         dashboardSelfTest()
+        transitionSelfTest()
     } catch {
         FileHandle.standardError.write(Data(("SELF-TEST FAILED: " + String(describing: error) + "\n").utf8))
         exit(1)

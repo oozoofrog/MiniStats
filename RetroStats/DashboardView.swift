@@ -6,69 +6,17 @@ struct DashboardView: View {
     @ObservedObject var model: DashboardModel
     var renderOnly = false
     @State private var selection: Set<String> = []
-    @State private var transitionProgress: Double = 0
-    @State private var transitionStart: Date?
-    @State private var transitionSeed: Int = 0
-    @State private var previousPage: DashboardPage?
-    @State private var transitionGen = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     private let ink = Color.primary
     private var storage: StorageController? { model.storage }
     private var selectedEntries: [CacheEntry] { storage?.report?.candidates.filter { selection.contains($0.path) } ?? [] }
     private var candidatePaths: [String] { storage?.report?.candidates.map(\.path) ?? [] }
     var body: some View {
-        ZStack(alignment: .top) {
-            VStack(spacing: 0) {
-                HStack(spacing: 10) {
-                    if model.page != .overview {
-                        Button { transitionTo(.overview) } label: { Image(systemName: "chevron.left").font(.pixel(16)).frame(width: 24, height: 24) }
-                            .buttonStyle(.plain).help("대시보드로 돌아가기").accessibilityLabel("대시보드로 돌아가기")
-                    } else {
-                        Image(systemName: "waveform.path").foregroundStyle(ink).font(.system(size: 19, weight: .semibold))
-                    }
-                    Text(titleFor(model.page)).font(.pixel(18))
-                    Spacer()
-                    if model.page == .overview {
-                        Text("실시간").font(.pixel(12)).foregroundStyle(.secondary)
-                        PixelLED(size: 10, color: ink)
-                    }
-                    Button { model.refreshContext(); transitionTo(.settings) } label: { PixelSliders(size: 18, color: ink).frame(width: 26, height: 26) }
-                        .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
-                }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 16)
-                if renderOnly {
-                    GeometryReader { geometry in
-                        pageContents.frame(width: geometry.size.width, height: geometry.size.height, alignment: .top).clipped()
-                    }
-                } else {
-                    ScrollView { pageContents }
-                }
-                if model.page == .storage { storageActionBar.padding(.horizontal, 22).padding(.vertical, 12) }
-                Divider().opacity(0.5)
-                HStack {
-                    Text("\(ProcessInfo.processInfo.activeProcessorCount)코어 · \(bytes(totalMemory))").font(.pixel(11)).lineLimit(1)
-                    Spacer()
-                    Text("3초마다 갱신").font(.pixel(11))
-                }.foregroundStyle(.secondary).padding(.horizontal, 22).padding(.vertical, 12)
-            }
-            .opacity((previousPage != nil && !reduceMotion) ? 0 : 1)
-            if let previousPage, !reduceMotion {
-                dashboardPanel(for: previousPage)
-                    .mask {
-                        PixelWaveMaskShape(seed: transitionSeed, animatableData: transitionProgress, inverted: true)
-                    }
-                dashboardPanel(for: model.page)
-                    .mask {
-                        PixelWaveMaskShape(seed: transitionSeed, animatableData: transitionProgress)
-                    }
-                if let start = transitionStart {
-                    TimelineView(.animation) { context in
-                        let elapsed = context.date.timeIntervalSince(start)
-                        let progress = min(1, elapsed / 0.5)
-                        PixelTransition(progress: progress, color: ink, seed: transitionSeed)
-                            .opacity(progress < 1 ? 1 : 0)
-                    }
-                }
-            }
+        TransitionContainer(
+            transition: WaveTransition(seed: 0, color: ink),
+            currentPage: model.page
+        ) { page in
+            dashboardPanel(for: page)
         }
         .font(.pixel(13))
         .frame(width: 400, height: 600)
@@ -81,7 +29,8 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 if page != .overview {
-                    Image(systemName: "chevron.left").font(.pixel(16)).frame(width: 24, height: 24).foregroundStyle(.secondary)
+                    Button { model.page = .overview } label: { Image(systemName: "chevron.left").font(.pixel(16)).frame(width: 24, height: 24) }
+                        .buttonStyle(.plain).help("대시보드로 돌아가기").accessibilityLabel("대시보드로 돌아가기")
                 } else {
                     Image(systemName: "waveform.path").foregroundStyle(ink).font(.system(size: 19, weight: .semibold))
                 }
@@ -91,9 +40,16 @@ struct DashboardView: View {
                     Text("실시간").font(.pixel(12)).foregroundStyle(.secondary)
                     PixelLED(size: 10, color: ink)
                 }
-                PixelSliders(size: 18, color: ink).frame(width: 26, height: 26)
+                Button { model.refreshContext(); model.page = .settings } label: { PixelSliders(size: 18, color: ink).frame(width: 26, height: 26) }
+                    .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
             }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 16)
-            ScrollView { pageContents(for: page) }
+            if renderOnly {
+                GeometryReader { geometry in
+                    pageContents(for: page).frame(width: geometry.size.width, height: geometry.size.height, alignment: .top).clipped()
+                }
+            } else {
+                ScrollView { pageContents(for: page) }
+            }
             if page == .storage { storageActionBar.padding(.horizontal, 22).padding(.vertical, 12) }
             Divider().opacity(0.5)
             HStack {
@@ -109,28 +65,6 @@ struct DashboardView: View {
         case .processes: return "프로세스"
         case .storage: return "스토리지 정리"
         case .settings: return "설정"
-        }
-    }
-    private func transitionTo(_ page: DashboardPage) {
-        guard !reduceMotion, model.page != page else { model.page = page; return }
-        transitionGen += 1
-        let gen = transitionGen
-        previousPage = model.page
-        transitionSeed = Int.random(in: 1...1_000_000)
-        transitionStart = .now
-        transitionProgress = 0
-        model.page = page
-        withAnimation(.linear(duration: 0.5)) {
-            transitionProgress = 1
-        }
-        Task {
-            try? await Task.sleep(for: .milliseconds(600))
-            await MainActor.run {
-                guard gen == transitionGen else { return }
-                transitionStart = nil
-                previousPage = nil
-                transitionProgress = 0
-            }
         }
     }
     private var pageContents: some View {
@@ -162,7 +96,7 @@ struct DashboardView: View {
                     Text("↑  \(model.upload)").foregroundStyle(.secondary)
                 }.font(.pixel(12))
             }
-            Button { transitionTo(.storage) } label: {
+            Button { model.page = .storage } label: {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
                         Label("스토리지", systemImage: "internaldrive")
@@ -178,7 +112,7 @@ struct DashboardView: View {
                         else { Text(storage?.busy == true ? "조회 중…" : "후보 확인") }
                     }.font(.pixel(10)).foregroundStyle(.secondary)
                 }.padding(14).lcdPanel(cornerRadius: 14)
-            }.buttonStyle(.plain).accessibilityRepresentation { Button("스토리지 정리 열기") { transitionTo(.storage) } }
+            }.buttonStyle(.plain).accessibilityRepresentation { Button("스토리지 정리 열기") { model.page = .storage } }
             HStack {
                 Text(model.battery).font(.pixel(11)).foregroundStyle(.secondary)
                 Spacer()
@@ -187,7 +121,7 @@ struct DashboardView: View {
         }
     }
     private func metric(order: ProcessOrder, value: Double?, subtitle: String, history: [Double]) -> some View {
-        Button { model.order = order; transitionTo(.processes) } label: {
+        Button { model.order = order; model.page = .processes } label: {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
                     Text(order == .cpu ? "CPU" : "MEM").font(.pixel(12)).foregroundStyle(ink)

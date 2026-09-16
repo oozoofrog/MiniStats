@@ -113,3 +113,81 @@ struct PixelWaveMaskShape: Shape {
         return path
     }
 }
+
+// MARK: - PageTransition protocol
+
+/// A page transition provides masks and an overlay that `TransitionContainer`
+/// applies to the old and new page panels during a transition. Each conforming
+/// type encodes one visual style (wave, fade, etc.).
+protocol PageTransition {
+    associatedtype NewMask: View
+    associatedtype OldMask: View
+    associatedtype Overlay: View
+
+    var seed: Int { get }
+    var color: Color { get }
+
+    func newPageMask(progress: Double) -> NewMask
+    func oldPageMask(progress: Double) -> OldMask
+    func overlay(progress: Double, start: Date?) -> Overlay
+}
+
+// MARK: - WaveTransition
+
+/// Wave wipe transition: a randomized multi-harmonic wave sweeps left to right.
+/// The new page is revealed to the left of the front, the old page is clipped
+/// to the right, and a shimmering pixel band straddles the boundary.
+struct WaveTransition: PageTransition {
+    var seed: Int
+    var color: Color
+
+    func newPageMask(progress: Double) -> PixelWaveMaskShape {
+        PixelWaveMaskShape(seed: seed, animatableData: progress)
+    }
+
+    func oldPageMask(progress: Double) -> PixelWaveMaskShape {
+        PixelWaveMaskShape(seed: seed, animatableData: progress, inverted: true)
+    }
+
+    func overlay(progress: Double, start: Date?) -> some View {
+        TimelineView(.animation) { context in
+            if let start {
+                let elapsed = context.date.timeIntervalSince(start)
+                let p = min(1, elapsed / 0.5)
+                PixelTransition(progress: p, color: color, seed: seed)
+                    .opacity(p < 1 ? 1 : 0)
+            } else {
+                EmptyView()
+            }
+        }
+    }
+}
+
+// MARK: - FadeTransition
+
+/// Fade transition: the new page fades in while the old page fades out. No
+/// overlay band — just opacity crossfade via masks.
+struct FadeTransition: PageTransition {
+    var seed: Int
+    var color: Color
+
+    static func opacity(forNewPage progress: Double) -> Double {
+        max(0, min(1, progress))
+    }
+
+    static func opacity(forOldPage progress: Double) -> Double {
+        max(0, min(1, 1 - progress))
+    }
+
+    func newPageMask(progress: Double) -> some View {
+        Color.white.opacity(Self.opacity(forNewPage: progress))
+    }
+
+    func oldPageMask(progress: Double) -> some View {
+        Color.white.opacity(Self.opacity(forOldPage: progress))
+    }
+
+    func overlay(progress: Double, start: Date?) -> some View {
+        EmptyView()
+    }
+}
