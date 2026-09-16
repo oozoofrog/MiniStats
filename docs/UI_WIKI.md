@@ -139,6 +139,7 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | 요소 | 설명 |
 | --- | --- |
 | 로그인 시 자동 실행 | `Toggle` (pixelToggle) |
+| 화면 전환 효과 | `Picker` (segmented). `model.transitionStyle` 바인딩. `wave`/`fade`/`flip` |
 | 시스템 설정 승인 버튼 | `loginApproval == true`일 때 |
 | 스토리지 알림 설정 | `Button` |
 | DerivedData 폴더 열기 | `Button` |
@@ -162,10 +163,18 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 
 | 컴포넌트 | 역할 |
 | --- | --- |
+| `PageTransition` | 프로토콜. `newPageMask`/`oldPageMask`/`overlay`가 `AnyView`를 반환해 런타임에 스타일 교체 가능 |
+| `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(seed:color:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
+| `WaveTransition` | 파도 위프 트랜지션 (`PixelWaveMaskShape` + `PixelTransition` 밴드 오버레이) |
+| `FadeTransition` | 페이드 크로스페이드. 불투명도 마스크만 사용 |
+| `FlipTransition` | 픽셀 플립. 셀 그리드가 대각선 파도로 뒤집히며 앞면(old)→뒷면(new) 교체 |
 | `PixelTransition` | 파도 밴드 픽셀 오버레이. `TimelineView(.animation)`으로 시간 기반 렌더 |
 | `PixelWaveMaskShape` | Animatable Shape. 파도 왼쪽(지나간 영역)을 채워 새 페이지 클리핑 |
+| `FlipMaskShape` | Animatable Shape. 셀 그리드에서 뒷면(new) 또는 앞면(old) 셀을 채움. `cellProgress`/`isBackFace`로 셀별 플립 진행도 계산 |
 | `PixelTransition.harmonics(seed:)` | 시드 기반 5중 하모닉 파도 형태 생성 (전환마다 다른 랜덤 형태) |
 | `PixelTransition.waveFront(y:progress:width:harmonics:)` | 특정 y에서 파도 경계 x 계산 |
+
+`TransitionContainer`는 `any PageTransition`을 받아 제네릭이 아닌 단일 구조로 동작하므로, 설정에서 선택한 스타일이 즉시 적용된다.
 
 ### 트랜지션 상태 변수
 
@@ -187,8 +196,9 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 
 전환 중 ZStack:
 - 배경: 이전 페이지 (전체)
-- 위: 새 페이지, `.mask { PixelWaveMaskShape(animatableData: transitionProgress) }` — 파도 왼쪽만 드러남
-- 최상: `PixelTransition` 파도 밴드 픽셀 오버레이
+- 위: 새 페이지, `.mask { transition.newPageMask(progress) }` — 스타일별 새 페이지 영역만 드러남
+- 그 아래: 이전 페이지, `.mask { transition.oldPageMask(progress) }` — 스타일별 이전 페이지 영역만 유지
+- 최상: `transition.overlay(progress, start:)` 스타일별 효과 오버레이 (파도 밴드 / 플립 솔기 등)
 
 ---
 

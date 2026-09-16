@@ -18,11 +18,18 @@ final class DashboardModel: ObservableObject {
     @Published var sampled = false
     @Published var loginEnabled = false
     @Published var loginApproval = false
+    @Published var transitionStyle: TransitionStyle {
+        didSet { UserDefaults.standard.set(transitionStyle.rawValue, forKey: Self.transitionStyleKey) }
+    }
     var storage: StorageController?
     var toggleLogin: (() -> Void)?
     var quit: (() -> Void)?
     private let readProcesses: () -> [pid_t: ProcessSample]
-    init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples) { self.readProcesses = readProcesses }
+    init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples) {
+        self.readProcesses = readProcesses
+        self.transitionStyle = TransitionStyle(rawValue: UserDefaults.standard.string(forKey: Self.transitionStyleKey) ?? "") ?? .wave
+    }
+    private static let transitionStyleKey = "transitionStyle"
     private let queue = DispatchQueue(label: "RetroStats.processes", qos: .utility)
     private var previous: [pid_t: ProcessSample] = [:]
     private var previousTime: Double?

@@ -38,5 +38,70 @@ func transitionSelfTest() {
     precondition(FadeTransition.opacity(forOldPage: 0) == 1, "Old page opacity at 0 should be 1")
     precondition(FadeTransition.opacity(forOldPage: 1) == 0, "Old page opacity at 1 should be 0")
 
-    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1)")
+    // Flip transition: cell-grid flip. The grid partitions into front faces
+    // (old page) and back faces (new page). At progress 0 every cell is a front
+    // face; at progress 1 every cell is a back face; mid-progress has both.
+    let cols = 50, rows = 75
+    let total = cols * rows
+    let flip0 = flipFaceCounts(0, cols: cols, rows: rows)
+    precondition(flip0.back == 0 && flip0.front == total, "Flip at progress 0 should be all front faces, got back=\(flip0.back) front=\(flip0.front)")
+    let flip1 = flipFaceCounts(1, cols: cols, rows: rows)
+    precondition(flip1.back == total && flip1.front == 0, "Flip at progress 1 should be all back faces, got back=\(flip1.back) front=\(flip1.front)")
+    let flipMid = flipFaceCounts(0.5, cols: cols, rows: rows)
+    precondition(flipMid.back > 0 && flipMid.front > 0, "Flip at progress 0.5 should have both faces, got back=\(flipMid.back) front=\(flipMid.front)")
+    precondition(flipMid.back + flipMid.front == total, "Flip faces should partition the grid, got back=\(flipMid.back) front=\(flipMid.front)")
+    // Monotonic: back grows and front shrinks as progress increases.
+    let flip25 = flipFaceCounts(0.25, cols: cols, rows: rows)
+    let flip75 = flipFaceCounts(0.75, cols: cols, rows: rows)
+    precondition(flip25.back <= flipMid.back && flipMid.back <= flip75.back, "Flip back face count should grow monotonically")
+    precondition(flip25.front >= flipMid.front && flipMid.front >= flip75.front, "Flip front face count should shrink monotonically")
+
+    // Flip mask shape bounds at the endpoints: new mask (back faces) is empty at
+    // 0 and fills the rect at 1; old mask (front faces) is the inverse.
+    let flipNew0 = FlipMaskShape(seed: 7, animatableData: 0).path(in: rect).boundingRect
+    precondition(flipNew0.width == 0 || flipNew0.height == 0, "Flip new mask at progress 0 should be empty, got \(flipNew0)")
+    let flipNew1 = FlipMaskShape(seed: 7, animatableData: 1).path(in: rect).boundingRect
+    precondition(flipNew1.width >= rect.width && flipNew1.height >= rect.height, "Flip new mask at progress 1 should fill, got \(flipNew1)")
+    let flipOld0 = FlipMaskShape(seed: 7, animatableData: 0, inverted: true).path(in: rect).boundingRect
+    precondition(flipOld0.width >= rect.width && flipOld0.height >= rect.height, "Flip old mask at progress 0 should fill, got \(flipOld0)")
+    let flipOld1 = FlipMaskShape(seed: 7, animatableData: 1, inverted: true).path(in: rect).boundingRect
+    precondition(flipOld1.width == 0 || flipOld1.height == 0, "Flip old mask at progress 1 should be empty, got \(flipOld1)")
+
+    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip face partition (endpoints, mid, monotonic)")
+
+    // Transition style selection: default is wave, every style round-trips
+    // through UserDefaults, unknown values fall back, and each style produces a
+    // distinct transition type.
+    let defaults = UserDefaults.standard
+    let key = "transitionStyle"
+    defaults.removeObject(forKey: key)
+    precondition(TransitionStyle(rawValue: defaults.string(forKey: key) ?? "") ?? .wave == .wave, "Default transition style should be wave")
+    for style in TransitionStyle.allCases {
+        defaults.set(style.rawValue, forKey: key)
+        precondition(TransitionStyle(rawValue: defaults.string(forKey: key) ?? "") == style, "Style \(style) should round-trip")
+    }
+    precondition(TransitionStyle(rawValue: "nope") == nil, "Unknown transition style raw value should not resolve")
+    let typeNames = Set(TransitionStyle.allCases.map { String(describing: type(of: $0.makeTransition(seed: 0, color: .primary))) })
+    precondition(typeNames.count == TransitionStyle.allCases.count, "Each style should produce a distinct transition type, got \(typeNames)")
+    defaults.removeObject(forKey: key)
+
+    print("PASS: transition style default/round-trip/invalid fallback, distinct transition types")
+}
+
+/// Counts front/back face cells for the flip mask at a given progress. Mirrors
+/// `FlipMaskShape.path` logic so self-tests assert cell partitioning exactly
+/// rather than measuring rendered area.
+private func flipFaceCounts(_ progress: Double, cols: Int, rows: Int) -> (front: Int, back: Int) {
+    var front = 0
+    var back = 0
+    for j in 0..<rows {
+        for i in 0..<cols {
+            if FlipMaskShape.isBackFace(progress: progress, i: i, j: j, cols: cols, rows: rows) {
+                back += 1
+            } else {
+                front += 1
+            }
+        }
+    }
+    return (front, back)
 }

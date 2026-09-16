@@ -13,7 +13,7 @@ struct DashboardView: View {
     private var candidatePaths: [String] { storage?.report?.candidates.map(\.path) ?? [] }
     var body: some View {
         TransitionContainer(
-            transition: WaveTransition(seed: 0, color: ink),
+            transition: model.transitionStyle.makeTransition(seed: 0, color: ink),
             currentPage: model.page
         ) { page in
             dashboardPanel(for: page)
@@ -389,6 +389,13 @@ struct DashboardView: View {
             Toggle("로그인 시 자동 실행", isOn: Binding(get: { model.loginEnabled }, set: { _ in model.toggleLogin?(); model.refreshContext() }))
                 .toggleStyle(.pixelToggle)
             if model.loginApproval { Button("시스템 설정에서 자동 실행 승인") { SMAppService.openSystemSettingsLoginItems() }.buttonStyle(.pixel) }
+            Divider()
+            VStack(alignment: .leading, spacing: 8) {
+                Text("화면 전환 효과").font(.pixel(12))
+                Picker("화면 전환 효과", selection: $model.transitionStyle) {
+                    ForEach(TransitionStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+                }.pickerStyle(.segmented).labelsHidden()
+            }
             Divider()
             Button("스토리지 알림 설정…") { storage?.openNotificationSettings() }
             Button("DerivedData 폴더 열기") { storage?.openFolder() }

@@ -3,8 +3,10 @@ import SwiftUI
 /// Manages page transition state and rendering. Encapsulates the progress
 /// animation, previous-page tracking, and seed-based randomization so
 /// `DashboardView` only calls `transitionTo(_:)` and provides page content.
-struct TransitionContainer<Transition: PageTransition, Content: View>: View {
-    let transition: Transition
+/// `transition` is an existential `any PageTransition` so the active style can
+/// be swapped from user settings without rebuilding the view tree.
+struct TransitionContainer<Content: View>: View {
+    let transition: any PageTransition
     let currentPage: DashboardPage
     @ViewBuilder let content: (DashboardPage) -> Content
 

@@ -118,18 +118,16 @@ struct PixelWaveMaskShape: Shape {
 
 /// A page transition provides masks and an overlay that `TransitionContainer`
 /// applies to the old and new page panels during a transition. Each conforming
-/// type encodes one visual style (wave, fade, etc.).
+/// type encodes one visual style (wave, fade, flip, etc.). Masks and overlay are
+/// returned as `AnyView` so the active style can be chosen at runtime from
+/// user settings without a separate generic `TransitionContainer` per style.
 protocol PageTransition {
-    associatedtype NewMask: View
-    associatedtype OldMask: View
-    associatedtype Overlay: View
-
     var seed: Int { get }
     var color: Color { get }
 
-    func newPageMask(progress: Double) -> NewMask
-    func oldPageMask(progress: Double) -> OldMask
-    func overlay(progress: Double, start: Date?) -> Overlay
+    func newPageMask(progress: Double) -> AnyView
+    func oldPageMask(progress: Double) -> AnyView
+    func overlay(progress: Double, start: Date?) -> AnyView
 }
 
 // MARK: - WaveTransition
@@ -141,16 +139,16 @@ struct WaveTransition: PageTransition {
     var seed: Int
     var color: Color
 
-    func newPageMask(progress: Double) -> PixelWaveMaskShape {
-        PixelWaveMaskShape(seed: seed, animatableData: progress)
+    func newPageMask(progress: Double) -> AnyView {
+        AnyView(PixelWaveMaskShape(seed: seed, animatableData: progress))
     }
 
-    func oldPageMask(progress: Double) -> PixelWaveMaskShape {
-        PixelWaveMaskShape(seed: seed, animatableData: progress, inverted: true)
+    func oldPageMask(progress: Double) -> AnyView {
+        AnyView(PixelWaveMaskShape(seed: seed, animatableData: progress, inverted: true))
     }
 
-    func overlay(progress: Double, start: Date?) -> some View {
-        TimelineView(.animation) { context in
+    func overlay(progress: Double, start: Date?) -> AnyView {
+        AnyView(TimelineView(.animation) { context in
             if let start {
                 let elapsed = context.date.timeIntervalSince(start)
                 let p = min(1, elapsed / 0.5)
@@ -159,7 +157,7 @@ struct WaveTransition: PageTransition {
             } else {
                 EmptyView()
             }
-        }
+        })
     }
 }
 
@@ -179,15 +177,144 @@ struct FadeTransition: PageTransition {
         max(0, min(1, 1 - progress))
     }
 
-    func newPageMask(progress: Double) -> some View {
-        Color.white.opacity(Self.opacity(forNewPage: progress))
+    func newPageMask(progress: Double) -> AnyView {
+        AnyView(Color.white.opacity(Self.opacity(forNewPage: progress)))
     }
 
-    func oldPageMask(progress: Double) -> some View {
-        Color.white.opacity(Self.opacity(forOldPage: progress))
+    func oldPageMask(progress: Double) -> AnyView {
+        AnyView(Color.white.opacity(Self.opacity(forOldPage: progress)))
     }
 
-    func overlay(progress: Double, start: Date?) -> some View {
-        EmptyView()
+    func overlay(progress: Double, start: Date?) -> AnyView {
+        AnyView(EmptyView())
+    }
+}
+
+// MARK: - FlipMaskShape
+
+/// Animatable clip shape for the pixel-flip transition. The screen is divided
+/// into a grid of `cellSize` cells. Each cell flips on a diagonal wave: a cell
+/// reaches its half-flip point when `progress` passes its diagonal delay, and
+/// from that point it shows its back face (new page) instead of its front face
+/// (old page). When `inverted` is false the shape fills back-face cells
+/// (reveals the NEW page); when true it fills front-face cells (clips the OLD
+/// page). `seed` is reserved for future per-transition variation; the diagonal
+/// wave is stable so mask endpoints are deterministic.
+struct FlipMaskShape: Shape {
+    var seed: Int
+    var animatableData: Double  // progress 0...1
+    var inverted: Bool = false
+    var cellSize: CGFloat = 8
+
+    func path(in rect: CGRect) -> Path {
+        let t = max(0, min(1, animatableData))
+        let cols = max(1, Int((rect.width + cellSize - 1) / cellSize))
+        let rows = max(1, Int((rect.height + cellSize - 1) / cellSize))
+        var path = Path()
+        for j in 0..<rows {
+            for i in 0..<cols {
+                let isBack = Self.isBackFace(progress: t, i: i, j: j, cols: cols, rows: rows)
+                guard isBack != inverted else { continue }
+                let x = CGFloat(i) * cellSize
+                let y = CGFloat(j) * cellSize
+                path.addRect(CGRect(x: x, y: y, width: cellSize, height: cellSize))
+            }
+        }
+        return path
+    }
+
+    /// Per-cell flip progress (0 at rest, 1 at fully flipped) for cell (i, j).
+    /// `band` spreads the wave so the half-flip point sweeps diagonally instead
+    /// of all cells flipping at once. Exposed so the overlay can render flip
+    /// edges from the same curve the masks use.
+    static func cellProgress(_ progress: Double, i: Int, j: Int, cols: Int, rows: Int) -> Double {
+        let t = max(0, min(1, progress))
+        let denom = max(1, cols + rows - 1)
+        let delay = Double(i + j) / Double(denom)
+        let band: Double = 1.0
+        return max(0, min(1, t * (1 + band) - delay * band))
+    }
+
+    /// Whether cell (i, j) shows its back face at a given progress: true once
+    /// the cell has passed its half-flip point.
+    static func isBackFace(progress: Double, i: Int, j: Int, cols: Int, rows: Int) -> Bool {
+        cellProgress(progress, i: i, j: j, cols: cols, rows: rows) >= 0.5
+    }
+}
+
+// MARK: - FlipTransition
+
+/// Pixel-flip transition: the screen is tiled into a grid and each cell flips
+/// on a diagonal wave, swapping from the old page (front face) to the new page
+/// (back face). The overlay draws the flip edge — a thin vertical seam at each
+/// cell's rotation axis, brightest at the half-flip — so the swap reads as a
+/// 3D flip rather than a flat checkerboard.
+struct FlipTransition: PageTransition {
+    var seed: Int
+    var color: Color
+
+    private static let cellSize: CGFloat = 8
+
+    func newPageMask(progress: Double) -> AnyView {
+        AnyView(FlipMaskShape(seed: seed, animatableData: progress, cellSize: Self.cellSize))
+    }
+
+    func oldPageMask(progress: Double) -> AnyView {
+        AnyView(FlipMaskShape(seed: seed, animatableData: progress, inverted: true, cellSize: Self.cellSize))
+    }
+
+    func overlay(progress: Double, start: Date?) -> AnyView {
+        AnyView(TimelineView(.animation) { context in
+            let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / 0.5)) }
+                ?? max(0, min(1, progress))
+            Canvas { ctx, size in
+                let cs = Self.cellSize
+                let cols = max(1, Int((size.width + cs - 1) / cs))
+                let rows = max(1, Int((size.height + cs - 1) / cs))
+                for j in 0..<rows {
+                    for i in 0..<cols {
+                        let cellT = FlipMaskShape.cellProgress(p, i: i, j: j, cols: cols, rows: rows)
+                        guard cellT > 0, cellT < 1 else { continue }
+                        // 0 at the edges (resting), 1 at the half-flip, so the seam
+                        // peaks exactly when a cell swaps faces.
+                        let edge = 1 - abs(1 - 2 * cellT)
+                        let alpha = edge * 0.45
+                        let cx = CGFloat(i) * cs + cs / 2
+                        let y = CGFloat(j) * cs
+                        let seam = CGRect(x: cx - 1, y: y, width: 2, height: cs)
+                        ctx.fill(Path(seam), with: .color(color.opacity(alpha)))
+                    }
+                }
+            }
+            .allowsHitTesting(false)
+        })
+    }
+}
+
+// MARK: - TransitionStyle
+
+/// User-selectable page transition styles. Persisted by raw value in
+/// UserDefaults and resolved to a concrete `PageTransition` via
+/// `makeTransition`.
+enum TransitionStyle: String, CaseIterable {
+    case wave, fade, flip
+
+    /// Display label for the settings picker.
+    var label: String {
+        switch self {
+        case .wave: return "웨이브"
+        case .fade: return "페이드"
+        case .flip: return "플립"
+        }
+    }
+
+    /// Builds the concrete transition for this style. `DashboardView` calls
+    /// this from the persisted setting so the active style is chosen at runtime.
+    func makeTransition(seed: Int, color: Color) -> any PageTransition {
+        switch self {
+        case .wave: return WaveTransition(seed: seed, color: color)
+        case .fade: return FadeTransition(seed: seed, color: color)
+        case .flip: return FlipTransition(seed: seed, color: color)
+        }
     }
 }
