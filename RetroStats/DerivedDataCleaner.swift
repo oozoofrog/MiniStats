@@ -187,7 +187,6 @@ struct DerivedDataCleaner {
     private func isProjectCacheName(_ name: String, path: String) -> Bool {
         let range = NSRange(name.startIndex..<name.endIndex, in: name)
         guard Self.projectRegex.firstMatch(in: name, options: [], range: range) != nil else { return false }
-        let fm = FileManager.default
         for sub in ["Build", "Logs", "Index.noindex", "SourcePackages"] {
             var st = stat()
             let p = (path as NSString).appendingPathComponent(sub)

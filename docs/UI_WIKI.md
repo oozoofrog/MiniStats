@@ -1,0 +1,207 @@
+# RetroStats UI 위키
+
+메뉴바 앱의 모든 화면 요소와 컴포넌트의 이름·역할·상태를 정의한다. 트랜지션 이슈 재현이나 UI 변경 시 이 문서의 용어를 기준으로 맥락을 전달한다.
+
+## 화면 구조 개요
+
+```
+┌─ Popover (TransparentPopover, 400×600) ────────────────────┐
+│ ┌─ Header ──────────────────────────────────────────────┐ │
+│ │ [뒤로] [타이틀]                          [실시간 LED] [설정] │ │
+│ └────────────────────────────────────────────────────────┘ │
+│ ┌─ Page Area (전환 애니메이션 영역) ───────────────────────┐ │
+│ │ overview | processes | storage | settings 중 1페이지    │ │
+│ └────────────────────────────────────────────────────────┘ │
+│ ┌─ Action Bar (storage 페이지에서만) ─────────────────────┐ │
+│ │ [공용 캐시 포함 토글] / [선택 정리 버튼] 등               │ │
+│ └────────────────────────────────────────────────────────┘ │
+│ ┌─ Footer ────────────────────────────────────────────────┐ │
+│ │ [코어·메모리]                          [3초마다 갱신]      │ │
+│ └────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────┘
+```
+
+## 페이지 (DashboardPage)
+
+`DashboardPage` enum: `overview`, `processes`, `storage`, `settings`
+
+페이지 전환은 `transitionTo(_:)`로만 수행해야 한다. 외부(AppDelegate 등)에서 직접 `model.page`를 변경하면 트랜지션 없이 즉시 전환된다.
+
+## Header
+
+| 요소 | 심볼 | 위치 | 설명 |
+| --- | --- | --- | --- |
+| 뒤로 버튼 | `Image(chevron.left)` | 좌측 | `model.page != .overview`일 때 표시. `transitionTo(.overview)` 호출 |
+| 타이틀 | `Text(title)` | 좌측 | 페이지별 제목 (RetroStats / 프로세스 / 스토리지 정리 / 설정) |
+| 실시간 표시 | `Text("실시간")` + `PixelLED` | 우측 | `.overview`에서만 표시 |
+| 설정 버튼 | `PixelSliders` | 우측 | `transitionTo(.settings)` 호출 |
+
+## Footer
+
+| 요소 | 설명 |
+| --- | --- |
+| 코어·메모리 | `\(activeProcessorCount)코어 · \(bytes(totalMemory))` |
+| 갱신 주기 | `3초마다 갱신` |
+
+---
+
+## Overview 페이지 (`overview`)
+
+대시보드 메인 화면. 4개 섹션으로 구성.
+
+### Overview 섹션
+
+| 요소 | 심볼 | 설명 |
+| --- | --- | --- |
+| CPU 카드 | `metric(order: .cpu, ...)` | LCDScreen에 큰 숫자% + HistoryLine. 탭 시 `.processes` 전환 |
+| 메모리 카드 | `metric(order: .memory, ...)` | LCDScreen에 큰 숫자% + HistoryLine. 탭 시 `.processes` 전환 |
+| 네트워크 | `Label("네트워크")` | 다운로드(↓) / 업로드(↑) 속도 |
+| 스토리지 카드 | `Button { transitionTo(.storage) }` | 디스크 % + UsageBar + 여유 공간 + 정리 후보. 탭 시 `.storage` 전환 |
+| 배터리/활성상태 | `Text(battery)` + `Button("활성 상태 보기")` | 배터리 상태 + 활성 상태 보기 실행 |
+
+### Metric 카드 구조 (`metric(order:value:subtitle:history:)`)
+
+```
+┌─ Metric Card (Button, .plain) ───────┐
+│ CPU                       ↗           │  ← 라벨 + 화살표
+│ ┌─ LCDScreen ──────────────────────┐ │
+│ │  42%                              │ │  ← 큰 숫자 (pixel 40)
+│ │  ▁▂▃▅▇▆▄▃▂▁  (HistoryLine)       │ │  ← 히스토리 그래프
+│ └───────────────────────────────────┘ │
+│ 전체 코어 사용률                        │  ← 부제목
+│ 상위 프로세스                           │  ← 섹션 라벨
+│ Xcode  45.2%                           │  ← 상위 3개 프로세스
+│ ...                                    │
+└───────────────────────────────────────┘
+```
+
+---
+
+## Processes 페이지 (`processDetails`)
+
+상위 프로세스 상세 화면.
+
+| 요소 | 설명 |
+| --- | --- |
+| 정렬 Picker | `.segmented` (CPU / 메모리) |
+| 요약 숫자 | 전체 CPU% 또는 사용 메모리 |
+| 분석 텍스트 | 사용자/시스템 비율, 로드 평균, 메모리 압력/스왑 |
+| 프로세스 리스트 | 상위 5개 (아이콘 + 이름 + PID + 값) |
+| 안내 텍스트 | 측정 기준 설명 |
+| 활성 상태 보기 버튼 | `.pixelGhost` 스타일 |
+
+---
+
+## Storage 페이지 (`storageDetails`)
+
+DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
+
+### Storage 섹션 구성
+
+| 요소 | 심볼 | 상태 조건 | 설명 |
+| --- | --- | --- | --- |
+| 디스크 요약 | `Text(bytes(disk.free))` + `UsageBar` | `disk != nil` | 여유 공간 + 사용률 바 |
+| DerivedData 헤더 | `Text("DerivedData")` | 항상 | 8시간 기준 안내 |
+| PixelHourglass | `PixelHourglass` | `busy && cleaning` | 정리 중 표시 (조회 중에는 미표시) |
+| 새로고침 버튼 | `PixelRefresh(animating:)` | 항상 | `busy`면 애니메이션 + 비활성화 |
+| 스캔 진행 텍스트 | `Text("조회 중: \(name)")` | `busy && !cleaning` | 현재 검사 중인 경로 |
+| 정리 진행 텍스트 | `Text("선택한 캐시 정리 중…")` | `busy && cleaning` | 정리 중 메시지 |
+| 에러 | `Text(error)` | `lastError != nil` | 빨간색, 텍스트 선택 가능 |
+| 후보 리스트 | `ForEach(report.candidates)` | `report != nil && cleanProgress == nil` | 토글 + 이름 + 크기 + Finder 버튼 |
+| 전체/최근조회 | `Text(...)` | `report != nil` | 전체 캐시 수 + 조회 시간 |
+
+### Clean Progress 분기 (`cleanProgressSection`)
+
+`storage?.cleanProgress`가 설정되면 후보 리스트 대신 표시:
+
+| Phase | 뷰 함수 | 설명 |
+| --- | --- | --- |
+| `.confirming` | `cleanConfirmCard` | 삭제 확인 카드 (lcdPanel) |
+| `.running` | `cleanRunningSection` | 진행 바 + 항목별 상태 (삭제중/삭제됨/유지/대기) |
+| `.done` / `.cancelled` | `cleanResultSection` | 완료/취소 요약 (확보 공간, 삭제/유지/전체 수) |
+| `.failed` | `cleanFailedSection` | 실패 요약 + 에러 메시지 |
+
+### Storage Action Bar (`storageActionBar`)
+
+`.storage` 페이지 하단에 표시. `cleanProgress.phase`에 따라 분기:
+
+| Phase | 버튼 |
+| --- | --- |
+| `.confirming` | [삭제 실행] (pixelPrimary) + [취소] |
+| `.running` | [정리 취소] (pixelPrimary) |
+| `.done/.cancelled/.failed` | [다시 조회] (pixelPrimary) |
+| 그 외 (idle) | [공용 캐시 포함 토글] + [선택한 N개 정리] (pixelPrimary) |
+
+---
+
+## Settings 페이지 (`settings`)
+
+| 요소 | 설명 |
+| --- | --- |
+| 로그인 시 자동 실행 | `Toggle` (pixelToggle) |
+| 시스템 설정 승인 버튼 | `loginApproval == true`일 때 |
+| 스토리지 알림 설정 | `Button` |
+| DerivedData 폴더 열기 | `Button` |
+| 활성 상태 보기 열기 | `Button` |
+| RetroStats 종료 | `Button` (`cleaning == true`면 비활성화) |
+
+---
+
+## 픽셀 아이콘 컴포넌트 (`PixelIcons.swift`)
+
+16×16 격자 기반 픽셀 아트 아이콘. LCD 테마 통일.
+
+| 컴포넌트 | 용도 | 애니메이션 |
+| --- | --- | --- |
+| `PixelLED` | 실시간 표시 등 | 정지 |
+| `PixelSliders` | 설정 버튼 라벨 | 정지 |
+| `PixelRefresh` | 새로고침 버튼 라벨 | `animating: true` 시 chasing pixel (호를 따라 픽셀이 시계 방향 이동, 화살촉 고정). `false` 시 전체 아이콘 정지 |
+| `PixelHourglass` | 정리 중 표시 | 모래시계 드레인 + 목 구간 낙하 스트림 |
+
+## 트랜지션 컴포넌트 (`PixelTransition.swift`)
+
+| 컴포넌트 | 역할 |
+| --- | --- |
+| `PixelTransition` | 파도 밴드 픽셀 오버레이. `TimelineView(.animation)`으로 시간 기반 렌더 |
+| `PixelWaveMaskShape` | Animatable Shape. 파도 왼쪽(지나간 영역)을 채워 새 페이지 클리핑 |
+| `PixelTransition.harmonics(seed:)` | 시드 기반 5중 하모닉 파도 형태 생성 (전환마다 다른 랜덤 형태) |
+| `PixelTransition.waveFront(y:progress:width:harmonics:)` | 특정 y에서 파도 경계 x 계산 |
+
+### 트랜지션 상태 변수
+
+| 변수 | 타입 | 설명 |
+| --- | --- | --- |
+| `transitionProgress` | `Double` | 0→1 애니메이션 진행도. `withAnimation`으로 구동 |
+| `transitionStart` | `Date?` | 파도 밴드 오버레이용 시작 시각 |
+| `transitionSeed` | `Int` | 파도 형태 시드 (전환마다 난수) |
+| `previousPage` | `DashboardPage?` | 전환 중 이전 페이지. `nil`이면 전환 아님 |
+| `transitionGen` | `Int` | 세대 카운터. 이전 전환의 정리 Task 무시용 |
+
+### 트랜지션 동작 (`transitionTo`)
+
+1. `previousPage = model.page` (이전 페이지 저장)
+2. `transitionSeed = Int.random(...)` (파도 형태 결정)
+3. `transitionProgress = 0`, `model.page = page` (새 페이지로 전환)
+4. `withAnimation(.linear(duration: 2.0)) { transitionProgress = 1 }` (마스크 애니메이션)
+5. 2.1초 후 정리: `previousPage = nil`, `transitionProgress = 0`
+
+전환 중 ZStack:
+- 배경: 이전 페이지 (전체)
+- 위: 새 페이지, `.mask { PixelWaveMaskShape(animatableData: transitionProgress) }` — 파도 왼쪽만 드러남
+- 최상: `PixelTransition` 파도 밴드 픽셀 오버레이
+
+---
+
+## 공통 UI 컴포넌트
+
+| 컴포넌트 | 파일 | 설명 |
+| --- | --- | --- |
+| `LCDScreen` | LCDScreen.swift | 어두운 배경 + 흰 텍스트 LCD 화면 컨테이너 |
+| `LCDPanelBackground` | LCDPanelBackground.swift |lcdPanel 모디파이어 (패널 배경) |
+| `UsageBar` | UsageBar.swift | 사용률 바 (디스크, 정리 진행) |
+| `HistoryLine` | HistoryLine.swift | 히스토리 그래프 (CPU/메모리) |
+| `PixelButtonStyle` | PixelControls.swift | `.pixel` / `.pixelPrimary` / `.pixelGhost` 버튼 스타일 |
+| `PixelToggleStyle` | PixelControls.swift | `.pixelToggle` 토글 스타일 |
+| `TransparentPopover` | Popover.swift | 메뉴바 투명 팝오버 |
+| `DashboardSurfaceController` | DashboardSurfaceController.swift | NSViewController 래퍼 |
+| `StatusReadout` | StatusReadout.swift | 메뉴바 아이콘 + 텍스트 표시 |
