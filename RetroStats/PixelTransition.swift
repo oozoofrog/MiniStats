@@ -124,6 +124,7 @@ struct PixelWaveMaskShape: Shape {
 protocol PageTransition {
     var seed: Int { get }
     var color: Color { get }
+    var duration: Double { get }
 
     func newPageMask(progress: Double) -> AnyView
     func oldPageMask(progress: Double) -> AnyView
@@ -138,6 +139,7 @@ protocol PageTransition {
 struct WaveTransition: PageTransition {
     var seed: Int
     var color: Color
+    var duration: Double
 
     func newPageMask(progress: Double) -> AnyView {
         AnyView(PixelWaveMaskShape(seed: seed, animatableData: progress))
@@ -151,7 +153,7 @@ struct WaveTransition: PageTransition {
         AnyView(TimelineView(.animation) { context in
             if let start {
                 let elapsed = context.date.timeIntervalSince(start)
-                let p = min(1, elapsed / 0.5)
+                let p = min(1, elapsed / duration)
                 PixelTransition(progress: p, color: color, seed: seed)
                     .opacity(p < 1 ? 1 : 0)
             } else {
@@ -168,6 +170,7 @@ struct WaveTransition: PageTransition {
 struct FadeTransition: PageTransition {
     var seed: Int
     var color: Color
+    var duration: Double
 
     static func opacity(forNewPage progress: Double) -> Double {
         max(0, min(1, progress))
@@ -252,6 +255,7 @@ struct FlipMaskShape: Shape {
 struct FlipTransition: PageTransition {
     var seed: Int
     var color: Color
+    var duration: Double
 
     private static let cellSize: CGFloat = 8
 
@@ -265,7 +269,7 @@ struct FlipTransition: PageTransition {
 
     func overlay(progress: Double, start: Date?) -> AnyView {
         AnyView(TimelineView(.animation) { context in
-            let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / 0.5)) }
+            let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / duration)) }
                 ?? max(0, min(1, progress))
             Canvas { ctx, size in
                 let cs = Self.cellSize
@@ -309,12 +313,41 @@ enum TransitionStyle: String, CaseIterable {
     }
 
     /// Builds the concrete transition for this style. `DashboardView` calls
-    /// this from the persisted setting so the active style is chosen at runtime.
-    func makeTransition(seed: Int, color: Color) -> any PageTransition {
+    /// this from the persisted style and speed so the active transition carries
+    /// the chosen duration (shared by `TransitionContainer` and the overlay).
+    func makeTransition(seed: Int, color: Color, duration: Double) -> any PageTransition {
         switch self {
-        case .wave: return WaveTransition(seed: seed, color: color)
-        case .fade: return FadeTransition(seed: seed, color: color)
-        case .flip: return FlipTransition(seed: seed, color: color)
+        case .wave: return WaveTransition(seed: seed, color: color, duration: duration)
+        case .fade: return FadeTransition(seed: seed, color: color, duration: duration)
+        case .flip: return FlipTransition(seed: seed, color: color, duration: duration)
+        }
+    }
+}
+
+// MARK: - TransitionSpeed
+
+/// User-selectable transition animation speed. Persisted by raw value in
+/// UserDefaults and mapped to a duration in seconds that drives both
+/// `TransitionContainer`'s `withAnimation`/cleanup timer and each transition's
+/// time-based overlay, so the mask animation and overlay stay in sync.
+enum TransitionSpeed: String, CaseIterable {
+    case slow, normal, fast
+
+    /// Animation duration in seconds. Slower speed = longer duration.
+    var duration: Double {
+        switch self {
+        case .slow: return 1.0
+        case .normal: return 0.5
+        case .fast: return 0.25
+        }
+    }
+
+    /// Display label for the settings picker.
+    var label: String {
+        switch self {
+        case .slow: return "느림"
+        case .normal: return "보통"
+        case .fast: return "빠름"
         }
     }
 }

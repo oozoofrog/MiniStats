@@ -81,11 +81,33 @@ func transitionSelfTest() {
         precondition(TransitionStyle(rawValue: defaults.string(forKey: key) ?? "") == style, "Style \(style) should round-trip")
     }
     precondition(TransitionStyle(rawValue: "nope") == nil, "Unknown transition style raw value should not resolve")
-    let typeNames = Set(TransitionStyle.allCases.map { String(describing: type(of: $0.makeTransition(seed: 0, color: .primary))) })
+    let typeNames = Set(TransitionStyle.allCases.map { String(describing: type(of: $0.makeTransition(seed: 0, color: .primary, duration: 0.5))) })
     precondition(typeNames.count == TransitionStyle.allCases.count, "Each style should produce a distinct transition type, got \(typeNames)")
     defaults.removeObject(forKey: key)
 
     print("PASS: transition style default/round-trip/invalid fallback, distinct transition types")
+
+    // Transition speed: default is normal, every speed round-trips through
+    // UserDefaults, unknown values fall back, the duration mapping is strictly
+    // ordered (slower = longer), and makeTransition threads the duration into
+    // the transition instance so TransitionContainer and the overlay share it.
+    let speedKey = "transitionSpeed"
+    defaults.removeObject(forKey: speedKey)
+    precondition(TransitionSpeed(rawValue: defaults.string(forKey: speedKey) ?? "") ?? .normal == .normal, "Default transition speed should be normal")
+    for speed in TransitionSpeed.allCases {
+        defaults.set(speed.rawValue, forKey: speedKey)
+        precondition(TransitionSpeed(rawValue: defaults.string(forKey: speedKey) ?? "") == speed, "Speed \(speed) should round-trip")
+    }
+    precondition(TransitionSpeed(rawValue: "nope") == nil, "Unknown transition speed raw value should not resolve")
+    precondition(TransitionSpeed.slow.duration > TransitionSpeed.normal.duration, "Slow duration should be longer than normal")
+    precondition(TransitionSpeed.normal.duration > TransitionSpeed.fast.duration, "Normal duration should be longer than fast")
+    for speed in TransitionSpeed.allCases {
+        let t = TransitionStyle.wave.makeTransition(seed: 0, color: .primary, duration: speed.duration)
+        precondition(t.duration == speed.duration, "Transition duration should match speed \(speed) (\(speed.duration)), got \(t.duration)")
+    }
+    defaults.removeObject(forKey: speedKey)
+
+    print("PASS: transition speed default/round-trip/invalid fallback, duration mapping, makeTransition duration plumbing")
 }
 
 /// Counts front/back face cells for the flip mask at a given progress. Mirrors

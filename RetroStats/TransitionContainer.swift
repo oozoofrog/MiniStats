@@ -53,11 +53,11 @@ struct TransitionContainer<Content: View>: View {
         seed = Int.random(in: 1...1_000_000)
         transitionStart = .now
         progress = 0
-        withAnimation(.linear(duration: 0.5)) {
+        withAnimation(.linear(duration: transition.duration)) {
             progress = 1
         }
         Task {
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(Int(transition.duration * 1000) + 100))
             await MainActor.run {
                 guard myGen == gen else { return }
                 transitionStart = nil

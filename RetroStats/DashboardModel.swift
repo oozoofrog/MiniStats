@@ -21,6 +21,9 @@ final class DashboardModel: ObservableObject {
     @Published var transitionStyle: TransitionStyle {
         didSet { UserDefaults.standard.set(transitionStyle.rawValue, forKey: Self.transitionStyleKey) }
     }
+    @Published var transitionSpeed: TransitionSpeed {
+        didSet { UserDefaults.standard.set(transitionSpeed.rawValue, forKey: Self.transitionSpeedKey) }
+    }
     var storage: StorageController?
     var toggleLogin: (() -> Void)?
     var quit: (() -> Void)?
@@ -28,8 +31,10 @@ final class DashboardModel: ObservableObject {
     init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples) {
         self.readProcesses = readProcesses
         self.transitionStyle = TransitionStyle(rawValue: UserDefaults.standard.string(forKey: Self.transitionStyleKey) ?? "") ?? .wave
+        self.transitionSpeed = TransitionSpeed(rawValue: UserDefaults.standard.string(forKey: Self.transitionSpeedKey) ?? "") ?? .normal
     }
     private static let transitionStyleKey = "transitionStyle"
+    private static let transitionSpeedKey = "transitionSpeed"
     private let queue = DispatchQueue(label: "RetroStats.processes", qos: .utility)
     private var previous: [pid_t: ProcessSample] = [:]
     private var previousTime: Double?

@@ -140,6 +140,7 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | --- | --- |
 | 로그인 시 자동 실행 | `Toggle` (pixelToggle) |
 | 화면 전환 효과 | `Picker` (segmented). `model.transitionStyle` 바인딩. `wave`/`fade`/`flip` |
+| 전환 속도 | `Picker` (segmented). `model.transitionSpeed` 바인딩. `slow`/`normal`/`fast` → 지속 시간(1.0/0.5/0.25초) |
 | 시스템 설정 승인 버튼 | `loginApproval == true`일 때 |
 | 스토리지 알림 설정 | `Button` |
 | DerivedData 폴더 열기 | `Button` |
@@ -164,7 +165,8 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | 컴포넌트 | 역할 |
 | --- | --- |
 | `PageTransition` | 프로토콜. `newPageMask`/`oldPageMask`/`overlay`가 `AnyView`를 반환해 런타임에 스타일 교체 가능 |
-| `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(seed:color:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
+| `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(seed:color:duration:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
+| `TransitionSpeed` | `slow`/`normal`/`fast` enum. `duration`으로 1.0/0.5/0.25초 매핑. UserDefaults(`transitionSpeed` 키)로 영속 |
 | `WaveTransition` | 파도 위프 트랜지션 (`PixelWaveMaskShape` + `PixelTransition` 밴드 오버레이) |
 | `FadeTransition` | 페이드 크로스페이드. 불투명도 마스크만 사용 |
 | `FlipTransition` | 픽셀 플립. 셀 그리드가 대각선 파도로 뒤집히며 앞면(old)→뒷면(new) 교체 |

@@ -13,7 +13,7 @@ struct DashboardView: View {
     private var candidatePaths: [String] { storage?.report?.candidates.map(\.path) ?? [] }
     var body: some View {
         TransitionContainer(
-            transition: model.transitionStyle.makeTransition(seed: 0, color: ink),
+            transition: model.transitionStyle.makeTransition(seed: 0, color: ink, duration: model.transitionSpeed.duration),
             currentPage: model.page
         ) { page in
             dashboardPanel(for: page)
@@ -394,6 +394,12 @@ struct DashboardView: View {
                 Text("화면 전환 효과").font(.pixel(12))
                 Picker("화면 전환 효과", selection: $model.transitionStyle) {
                     ForEach(TransitionStyle.allCases, id: \.self) { Text($0.label).tag($0) }
+                }.pickerStyle(.segmented).labelsHidden()
+            }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("전환 속도").font(.pixel(12))
+                Picker("전환 속도", selection: $model.transitionSpeed) {
+                    ForEach(TransitionSpeed.allCases, id: \.self) { Text($0.label).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
             }
             Divider()
