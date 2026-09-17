@@ -40,8 +40,10 @@ struct DashboardView: View {
                     Text("실시간").font(.pixel(12)).foregroundStyle(.secondary)
                     PixelLED(size: 10, color: ink)
                 }
-                Button { model.refreshContext(); model.page = .settings } label: { PixelSliders(size: 18, color: ink).frame(width: 26, height: 26) }
-                    .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
+                if page != .settings {
+                    Button { model.refreshContext(); model.page = .settings } label: { PixelSliders(size: 18, color: ink).frame(width: 26, height: 26) }
+                        .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
+                }
             }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 16)
             if renderOnly {
                 GeometryReader { geometry in
