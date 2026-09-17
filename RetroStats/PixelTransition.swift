@@ -243,6 +243,21 @@ struct FlipMaskShape: Shape {
     static func isBackFace(progress: Double, i: Int, j: Int, cols: Int, rows: Int) -> Bool {
         cellProgress(progress, i: i, j: j, cols: cols, rows: rows) >= 0.5
     }
+
+    /// Half-width of the seam band around the half-flip point (cellT==0.5).
+    /// Cells whose cellT falls outside [0.5 - half, 0.5 + half] draw no seam, so
+    /// the overlay traces only the narrow diagonal flip edge instead of every
+    /// flipping cell (which at mid-progress is nearly the whole grid).
+    static let seamBandHalf: Double = 0.05
+
+    /// Seam brightness for a cell at `cellT` (0...1). Peaks at the half-flip
+    /// (cellT==0.5), falls linearly to 0 at the band edge, and is 0 outside the
+    /// band. The overlay skips any cell where this returns 0.
+    static func seamAlpha(_ cellT: Double) -> Double {
+        let d = abs(cellT - 0.5)
+        guard d <= seamBandHalf else { return 0 }
+        return (1 - d / seamBandHalf) * 0.45
+    }
 }
 
 // MARK: - FlipTransition
@@ -278,11 +293,8 @@ struct FlipTransition: PageTransition {
                 for j in 0..<rows {
                     for i in 0..<cols {
                         let cellT = FlipMaskShape.cellProgress(p, i: i, j: j, cols: cols, rows: rows)
-                        guard cellT > 0, cellT < 1 else { continue }
-                        // 0 at the edges (resting), 1 at the half-flip, so the seam
-                        // peaks exactly when a cell swaps faces.
-                        let edge = 1 - abs(1 - 2 * cellT)
-                        let alpha = edge * 0.45
+                        let alpha = FlipMaskShape.seamAlpha(cellT)
+                        guard alpha > 0 else { continue }
                         let cx = CGFloat(i) * cs + cs / 2
                         let y = CGFloat(j) * cs
                         let seam = CGRect(x: cx - 1, y: y, width: 2, height: cs)

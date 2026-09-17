@@ -67,7 +67,46 @@ func transitionSelfTest() {
     let flipOld1 = FlipMaskShape(seed: 7, animatableData: 1, inverted: true).path(in: rect).boundingRect
     precondition(flipOld1.width == 0 || flipOld1.height == 0, "Flip old mask at progress 1 should be empty, got \(flipOld1)")
 
-    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip face partition (endpoints, mid, monotonic)")
+    // Flip seam overlay: the seam must trace only the narrow diagonal band of
+    // cells at the half-flip point (cellT≈0.5), not every flipping cell. At
+    // mid-progress nearly every cell is "flipping" (0<cellT<1), so a naive
+    // 0<cellT<1 guard would draw a seam for ~100% of the grid — a full-screen
+    // striped artifact. seamAlpha must be >0 for only a small fraction.
+    let seamCols = 50, seamRows = 75
+    let seamTotal = seamCols * seamRows
+    var seamDrawn = 0
+    var seamPeak: Double = 0
+    for j in 0..<seamRows {
+        for i in 0..<seamCols {
+            let cellT = FlipMaskShape.cellProgress(0.5, i: i, j: j, cols: seamCols, rows: seamRows)
+            let a = FlipMaskShape.seamAlpha(cellT)
+            if a > 0 { seamDrawn += 1 }
+            seamPeak = max(seamPeak, a)
+        }
+    }
+    precondition(seamDrawn > 0, "Some cells should draw a seam at mid-progress")
+    precondition(Double(seamDrawn) < Double(seamTotal) * 0.20, "Seam overlay should cover <20% of grid at mid-progress, got \(seamDrawn)/\(seamTotal)")
+    precondition(seamPeak > 0, "Peak seam alpha at mid-progress should be >0")
+    // Cells far from the half-flip (cellT near 0 or 1) must draw nothing.
+    precondition(FlipMaskShape.seamAlpha(0) == 0, "Seam alpha at cellT=0 must be 0")
+    precondition(FlipMaskShape.seamAlpha(1) == 0, "Seam alpha at cellT=1 must be 0")
+    precondition(FlipMaskShape.seamAlpha(0.5) == seamPeak, "Seam alpha should peak at cellT=0.5")
+    precondition(FlipMaskShape.seamAlpha(0.3) == 0, "Seam alpha far from 0.5 must be 0")
+    precondition(FlipMaskShape.seamAlpha(0.7) == 0, "Seam alpha far from 0.5 must be 0")
+    // Seam cells must lie on a single diagonal band: their i+j values cluster.
+    var seamIJMinMax: (min: Int, max: Int) = (Int.max, Int.min)
+    for j in 0..<seamRows {
+        for i in 0..<seamCols {
+            let cellT = FlipMaskShape.cellProgress(0.5, i: i, j: j, cols: seamCols, rows: seamRows)
+            guard FlipMaskShape.seamAlpha(cellT) > 0 else { continue }
+            seamIJMinMax.0 = min(seamIJMinMax.0, i + j)
+            seamIJMinMax.1 = max(seamIJMinMax.1, i + j)
+        }
+    }
+    let seamBandDiagonals = seamIJMinMax.1 - seamIJMinMax.0 + 1
+    precondition(seamBandDiagonals <= 16, "Seam band should be a narrow diagonal (<=16 diagonals), got \(seamBandDiagonals)")
+
+    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip face partition (endpoints, mid, monotonic), flip seam band")
 
     // Transition style selection: default is wave, every style round-trips
     // through UserDefaults, unknown values fall back, and each style produces a
