@@ -15,7 +15,7 @@ struct CacheReport: Codable {
         guard report.hours == 8, report.generatedAt.isFinite,
               report.totalBytes >= 0, report.candidateBytes >= 0,
               report.items.allSatisfy({ $0.size >= 0 && $0.path.hasPrefix("/") }) else {
-            throw NSError(domain: "RetroStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "DerivedData 조회 결과가 올바르지 않습니다."])
+            throw NSError(domain: "RetroStats", code: 1, userInfo: [NSLocalizedDescriptionKey: "The DerivedData report is invalid."])
         }
         return report
     }

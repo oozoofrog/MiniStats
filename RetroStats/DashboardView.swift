@@ -30,19 +30,19 @@ struct DashboardView: View {
             HStack(spacing: 10) {
                 if page != .overview {
                     Button { model.page = .overview } label: { Image(systemName: "chevron.left").font(.pixel(16)).frame(width: 24, height: 24) }
-                        .buttonStyle(.plain).help("대시보드로 돌아가기").accessibilityLabel("대시보드로 돌아가기")
+                        .buttonStyle(.plain).help("Back to dashboard").accessibilityLabel("Back to dashboard")
                 } else {
                     Image(systemName: "waveform.path").foregroundStyle(ink).font(.system(size: 19, weight: .semibold))
                 }
                 Text(titleFor(page)).font(.pixel(18))
                 Spacer()
                 if page == .overview {
-                    Text("실시간").font(.pixel(12)).foregroundStyle(.secondary)
+                    Text("Live").font(.pixel(12)).foregroundStyle(.secondary)
                     PixelLED(size: 10, color: ink)
                 }
                 if page != .settings {
                     Button { model.refreshContext(); model.page = .settings } label: { PixelSliders(size: 18, color: ink).frame(width: 26, height: 26) }
-                        .buttonStyle(.plain).help("설정").accessibilityLabel("설정")
+                        .buttonStyle(.plain).help("Settings").accessibilityLabel("Settings")
                 }
             }.padding(.horizontal, 22).padding(.top, 20).padding(.bottom, 16)
             if renderOnly {
@@ -55,18 +55,18 @@ struct DashboardView: View {
             if page == .storage { storageActionBar.padding(.horizontal, 22).padding(.vertical, 12) }
             Divider().opacity(0.5)
             HStack {
-                Text("\(ProcessInfo.processInfo.activeProcessorCount)코어 · \(bytes(totalMemory))").font(.pixel(11)).lineLimit(1)
+                Text("\(ProcessInfo.processInfo.activeProcessorCount) cores · \(bytes(totalMemory))").font(.pixel(11)).lineLimit(1)
                 Spacer()
-                Text("3초마다 갱신").font(.pixel(11))
+                Text("Refreshes every 3 seconds").font(.pixel(11))
             }.foregroundStyle(.secondary).padding(.horizontal, 22).padding(.vertical, 12)
         }
     }
     private func titleFor(_ page: DashboardPage) -> String {
         switch page {
         case .overview: return "RetroStats"
-        case .processes: return "프로세스"
-        case .storage: return "스토리지 정리"
-        case .settings: return "설정"
+        case .processes: return "Processes"
+        case .storage: return "Storage Cleanup"
+        case .settings: return "Settings"
         }
     }
     private var pageContents: some View {
@@ -85,13 +85,13 @@ struct DashboardView: View {
     private var overview: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(alignment: .top, spacing: 20) {
-                metric(order: .cpu, value: model.cpu?.total, subtitle: "전체 코어 사용률", history: model.cpuHistory)
+                metric(order: .cpu, value: model.cpu?.total, subtitle: "All-core usage", history: model.cpuHistory)
                 Rectangle().fill(ink.opacity(0.08)).frame(width: 1)
-                metric(order: .memory, value: model.memory?.percent, subtitle: model.memory.map { "\(bytes($0.used)) / \(bytes(totalMemory))" } ?? "측정 중…", history: model.memoryHistory)
+                metric(order: .memory, value: model.memory?.percent, subtitle: model.memory.map { "\(bytes($0.used)) / \(bytes(totalMemory))" } ?? "Measuring…", history: model.memoryHistory)
             }.fixedSize(horizontal: false, vertical: true)
             Divider().opacity(0.5)
             HStack {
-                Label("네트워크", systemImage: "network").font(.pixel(12))
+                Label("Network", systemImage: "network").font(.pixel(12))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 6) {
                     Text("↓  \(model.download)").foregroundStyle(ink)
@@ -101,24 +101,24 @@ struct DashboardView: View {
             Button { model.page = .storage } label: {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack {
-                        Label("스토리지", systemImage: "internaldrive")
+                        Label("Storage", systemImage: "internaldrive")
                         Spacer()
                         Text(storage?.disk.map { String(format: "%.0f%%", $0.percent) } ?? "—")
                         Image(systemName: "chevron.right").font(.pixel(10)).foregroundStyle(.secondary)
                     }.font(.pixel(12))
                     UsageBar(percent: storage?.disk?.percent ?? 0, color: ink, warning: storage?.disk?.warning == true)
                     HStack {
-                        Text(storage?.disk.map { "여유 \(bytes($0.free))" } ?? "읽기 실패")
+                        Text(storage?.disk.map { "Free \(bytes($0.free))" } ?? "Read failed")
                         Spacer()
-                        if let report = storage?.report { Text("정리 후보 \(bytes(UInt64(report.candidateBytes)))") }
-                        else { Text(storage?.busy == true ? "조회 중…" : "후보 확인") }
+                        if let report = storage?.report { Text("Cleanup candidates \(bytes(UInt64(report.candidateBytes)))") }
+                        else { Text(storage?.busy == true ? "Checking…" : "Review candidates") }
                     }.font(.pixel(10)).foregroundStyle(.secondary)
                 }.padding(14).lcdPanel(cornerRadius: 14)
-            }.buttonStyle(.plain).accessibilityRepresentation { Button("스토리지 정리 열기") { model.page = .storage } }
+            }.buttonStyle(.plain).accessibilityRepresentation { Button("Open Storage Cleanup") { model.page = .storage } }
             HStack {
                 Text(model.battery).font(.pixel(11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("활성 상태 보기") { openActivityMonitor() }.font(.pixel(11)).buttonStyle(.pixelGhost)
+                Button("Activity Monitor") { openActivityMonitor() }.font(.pixel(11)).buttonStyle(.pixelGhost)
             }
         }
     }
@@ -140,10 +140,10 @@ struct DashboardView: View {
                     }
                 }
                 Text(subtitle).font(.pixel(10)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-                Text("상위 프로세스").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Top Processes").font(.pixel(10)).foregroundStyle(.secondary)
                 let rows = Array(order.sorted(model.processes).prefix(3))
                 if rows.isEmpty {
-                    Text(model.sampled && model.processes.isEmpty ? "읽을 수 있는 프로세스 없음" : "측정 중…")
+                    Text(model.sampled && model.processes.isEmpty ? "No readable processes" : "Measuring…")
                         .font(.pixel(10)).foregroundStyle(.secondary).frame(height: 54, alignment: .top)
                 } else {
                     ForEach(rows) { process in
@@ -155,34 +155,34 @@ struct DashboardView: View {
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
-        }.buttonStyle(.plain).accessibilityLabel("\(order.rawValue) \(value.map { String(format: "%.0f%%", $0) } ?? "측정 중"), 상위 프로세스 자세히 보기")
+        }.buttonStyle(.plain).accessibilityLabel("\(order.rawValue) \(value.map { String(format: "%.0f%%", $0) } ?? "Measuring"), view top processes in detail")
     }
     private var processDetails: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("정렬 기준", selection: $model.order) {
+            Picker("Sort by", selection: $model.order) {
                 ForEach(ProcessOrder.allCases) { Text($0.rawValue).tag($0) }
             }.pickerStyle(.segmented)
             HStack(alignment: .firstTextBaseline) {
                 Text(model.order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
                     .font(.pixel(32))
-                Text(model.order == .cpu ? "전체 CPU" : "/ \(bytes(totalMemory))").font(.pixel(12)).foregroundStyle(.secondary)
+                Text(model.order == .cpu ? "All CPU" : "/ \(bytes(totalMemory))").font(.pixel(12)).foregroundStyle(.secondary)
             }
             if model.order == .cpu {
-                Text(model.cpu.map { String(format: "사용자 %.1f%% · 시스템 %.1f%%", $0.user, $0.system) } ?? "측정 중…").font(.pixel(11)).foregroundStyle(.secondary)
+                Text(model.cpu.map { String(format: "User %.1f%% · System %.1f%%", $0.user, $0.system) } ?? "Measuring…").font(.pixel(11)).foregroundStyle(.secondary)
                 Text(model.load).font(.pixel(10)).foregroundStyle(.secondary)
             } else {
                 if let memory = model.memory {
-                    Text("앱 \(bytes(memory.app)) · Wired \(bytes(memory.wired)) · 압축 \(bytes(memory.compressed))").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("App \(bytes(memory.app)) · Wired \(bytes(memory.wired)) · Compressed \(bytes(memory.compressed))").font(.pixel(10)).foregroundStyle(.secondary)
                 }
                 Text(model.pressure + "\n" + model.swap).font(.pixel(11)).foregroundStyle(.secondary)
             }
             HStack {
-                Text("상위 5개").font(.pixel(12))
+                Text("Top 5").font(.pixel(12))
                 Spacer()
-                Text(model.order == .cpu ? "CPU %" : "메모리").font(.pixel(11)).foregroundStyle(.secondary)
+                Text(model.order == .cpu ? "CPU %" : "Memory").font(.pixel(11)).foregroundStyle(.secondary)
             }.padding(.top, 4)
             let rows = Array(model.order.sorted(model.processes).prefix(5))
-            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "프로세스 정보를 읽을 수 없습니다." : "CPU 사용량을 측정하고 있습니다…").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 20) }
+            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "No process information is available." : "Measuring CPU usage…").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 20) }
             ForEach(rows) { process in
                 HStack(spacing: 10) {
                     Image(systemName: "app.dashed").foregroundStyle(.secondary).font(.system(size: 19)).accessibilityHidden(true)
@@ -194,9 +194,9 @@ struct DashboardView: View {
                     Text(processValue(process, order: model.order)).font(.pixel(12))
                 }.padding(.vertical, 4)
             }
-            Text(model.order == .cpu ? "접근 가능한 프로세스만 표시합니다. 프로세스 CPU 100%는 코어 1개 기준으로, 여러 코어를 사용하면 100%를 넘을 수 있습니다." : "접근 가능한 프로세스만 표시합니다. 메모리는 활성 상태 보기의 메모리 열과 같은 기준입니다.")
+            Text(model.order == .cpu ? "Only processes accessible to RetroStats are shown. Process CPU 100% represents one core; using multiple cores can exceed 100%." : "Only processes accessible to RetroStats are shown. Memory uses the same basis as the Memory column in Activity Monitor.")
                 .font(.pixel(10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-            Button("활성 상태 보기 열기") { openActivityMonitor() }.buttonStyle(.pixelGhost).controlSize(.small)
+            Button("Open Activity Monitor") { openActivityMonitor() }.buttonStyle(.pixelGhost).controlSize(.small)
         }
     }
     private var storageDetails: some View {
@@ -204,7 +204,7 @@ struct DashboardView: View {
             if let disk = storage?.disk {
                 HStack(alignment: .firstTextBaseline) {
                     Text(bytes(disk.free)).font(.pixel(30))
-                    Text("여유 공간").font(.pixel(12)).foregroundStyle(.secondary)
+                    Text("Free Space").font(.pixel(12)).foregroundStyle(.secondary)
                 }
                 UsageBar(percent: disk.percent, color: ink, warning: disk.warning)
                 Text(disk.description).font(.pixel(10)).foregroundStyle(.secondary)
@@ -214,26 +214,26 @@ struct DashboardView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("DerivedData").font(.pixel(14))
-                    Text("8시간 이상 사용하지 않은 캐시").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("Caches unused for more than 8 hours").font(.pixel(10)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if storage?.busy == true && storage?.cleaning == true { PixelHourglass(size: 14, color: ink) }
-                Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink, animating: storage?.busy == true) }.disabled(storage?.busy == true).help("다시 조회").accessibilityLabel("DerivedData 다시 조회")
+                Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? .secondary : ink, animating: storage?.busy == true) }.disabled(storage?.busy == true).help("Check again").accessibilityLabel("Check DerivedData again")
             }
             if let progress = storage?.cleanProgress {
                 cleanProgressSection(progress)
             } else {
-                if storage?.busy == true { Text(storage?.cleaning == true ? "선택한 캐시 정리 중…" : (storage?.scanPath.map { "조회 중: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "캐시 용량을 조회하고 있습니다…")).font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
+                if storage?.busy == true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
                 if let error = storage?.lastError { Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled) }
                 if let report = storage?.report {
                     HStack {
-                        Text("후보 \(report.candidates.count)개 · \(bytes(UInt64(report.candidateBytes)))")
+                        Text("\(report.candidates.count) candidates · \(bytes(UInt64(report.candidateBytes)))")
                         Spacer()
-                        Button(selection.count == candidatePaths.count && !selection.isEmpty ? "선택 해제" : "모두 선택") {
+                        Button(selection.count == candidatePaths.count && !selection.isEmpty ? "Deselect All" : "Select All") {
                             selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
                         }.buttonStyle(.pixelGhost).disabled(storage?.busy == true || candidatePaths.isEmpty)
                     }.font(.pixel(11))
-                    if report.candidates.isEmpty { Text("지금 정리할 오래된 캐시가 없습니다.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
+                    if report.candidates.isEmpty { Text("No old caches need cleanup right now.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
                     ForEach(report.candidates, id: \.path) { entry in
                         HStack(spacing: 8) {
                             Toggle(isOn: Binding(get: { selection.contains(entry.path) }, set: { if $0 { selection.insert(entry.path) } else { selection.remove(entry.path) } })) {
@@ -244,11 +244,11 @@ struct DashboardView: View {
                             }.toggleStyle(.pixelToggle).disabled(storage?.busy == true).help(entry.path)
                             Spacer(minLength: 0)
                             Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) } label: { Image(systemName: "folder") }
-                                .buttonStyle(.plain).help("Finder에서 보기").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Finder에서 보기")
+                                .buttonStyle(.plain).help("Show in Finder").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Show in Finder")
                         }.padding(.vertical, 3)
                     }
-                    Text("전체 캐시 \(report.items.count)개 · \(bytes(UInt64(report.totalBytes)))").font(.pixel(10)).foregroundStyle(.secondary)
-                    Text("최근 조회 \(DateFormatter.localizedString(from: Date(timeIntervalSince1970: report.generatedAt), dateStyle: .short, timeStyle: .short))")
+                    Text("\(report.items.count) total caches · \(bytes(UInt64(report.totalBytes)))").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("Last checked \(englishDateTime(Date(timeIntervalSince1970: report.generatedAt)))")
                         .font(.pixel(10)).foregroundStyle(.secondary)
                 }
             }
@@ -265,31 +265,31 @@ struct DashboardView: View {
     }
     private func cleanConfirmCard(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("선택한 \(progress.totalCount)개 · \(bytes(UInt64(progress.items.reduce(Int64(0)) { $0 + $1.size })))를 영구 삭제할까요?").font(.pixel(13))
-            Text("8시간 기준으로 다시 검사한 뒤 삭제합니다. 사용 중인 항목은 자동으로 유지됩니다.").font(.pixel(11)).foregroundStyle(.secondary)
+            Text("Permanently delete \(progress.totalCount) selected items totaling \(bytes(UInt64(progress.items.reduce(Int64(0)) { $0 + $1.size })))?").font(.pixel(13))
+            Text("Each item will be rechecked against the 8-hour threshold. Items in use are kept automatically.").font(.pixel(11)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(progress.items, id: \.path) { item in
                     Text(URL(fileURLWithPath: item.path).lastPathComponent).font(.pixel(10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
             }
-            Text("정리 전 Xcode와 xcodebuild를 종료하고, 정리 중에는 새 빌드를 시작하지 마세요.").font(.pixel(10)).foregroundStyle(.secondary)
+            Text("Quit Xcode and xcodebuild before cleanup, and do not start a new build while cleanup is running.").font(.pixel(10)).foregroundStyle(.secondary)
         }.padding(14).lcdPanel(cornerRadius: 12)
     }
     private func cleanRunningSection(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("정리 진행").font(.pixel(14))
+                Text("Cleanup Progress").font(.pixel(14))
                 Spacer()
                 ProgressView().controlSize(.small)
             }
             HStack {
-                Text("\(progress.resolvedCount) / \(progress.totalCount) 항목").font(.pixel(13))
+                Text("\(progress.resolvedCount) / \(progress.totalCount) items").font(.pixel(13))
                 Spacer()
-                Text("확보 \(bytes(UInt64(progress.freedBytes)))").font(.pixel(12)).foregroundStyle(.secondary)
+                Text("Freed \(bytes(UInt64(progress.freedBytes)))").font(.pixel(12)).foregroundStyle(.secondary)
             }
             UsageBar(percent: Double(progress.resolvedCount) / Double(max(progress.totalCount, 1)) * 100, color: ink)
             if let path = progress.currentPath {
-                Text("삭제 중: \(URL(fileURLWithPath: path).lastPathComponent)").font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                Text("Deleting: \(URL(fileURLWithPath: path).lastPathComponent)").font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(progress.items, id: \.path) { item in
@@ -307,28 +307,28 @@ struct DashboardView: View {
     private func cleanResultSection(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(progress.phase == .cancelled ? "정리 취소" : "정리 완료").font(.pixel(14))
+                Text(progress.phase == .cancelled ? "Cleanup Cancelled" : "Cleanup Complete").font(.pixel(14))
                 Spacer()
                 Image(systemName: progress.phase == .cancelled ? "minus.circle" : "checkmark.circle").foregroundStyle(progress.phase == .cancelled ? Color.secondary : Color.green)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(bytes(UInt64(progress.freedBytes))).font(.pixel(26))
-                Text("확보된 공간").font(.pixel(12)).foregroundStyle(.secondary)
+                Text("Space Freed").font(.pixel(12)).foregroundStyle(.secondary)
             }
             HStack(spacing: 16) {
-                Text("삭제 \(progress.deletedCount)").font(.pixel(11)).foregroundStyle(.secondary)
-                Text("유지 \(progress.keptCount)").font(.pixel(11)).foregroundStyle(.secondary)
-                Text("전체 \(progress.totalCount)").font(.pixel(11)).foregroundStyle(.secondary)
+                Text("Deleted \(progress.deletedCount)").font(.pixel(11)).foregroundStyle(.secondary)
+                Text("Kept \(progress.keptCount)").font(.pixel(11)).foregroundStyle(.secondary)
+                Text("Total \(progress.totalCount)").font(.pixel(11)).foregroundStyle(.secondary)
             }
             if progress.phase == .cancelled {
-                Text("정리를 중단했습니다. 진행 중인 항목까지만 반영됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Cleanup was stopped. Only items processed before cancellation were applied.").font(.pixel(10)).foregroundStyle(.secondary)
             }
         }
     }
     private func cleanFailedSection(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("정리 실패").font(.pixel(14))
+                Text("Cleanup Failed").font(.pixel(14))
                 Spacer()
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.red)
             }
@@ -349,69 +349,69 @@ struct DashboardView: View {
     }
     private func cleanItemTag(_ state: CleanProgress.ItemState) -> String {
         switch state {
-        case .deleted: return "삭제됨"
-        case .deleting: return "삭제 중"
-        case .kept: return "유지"
-        case .failed: return "실패"
-        case .pending: return "대기"
+        case .deleted: return "Deleted"
+        case .deleting: return "Deleting"
+        case .kept: return "Kept"
+        case .failed: return "Failed"
+        case .pending: return "Pending"
         }
     }
     private var storageActionBar: some View {
         VStack(alignment: .leading, spacing: 10) {
             if storage?.cleanProgress?.phase == .confirming {
                 Button { storage?.confirmCleanRun() } label: {
-                    Text("삭제 실행").frame(maxWidth: .infinity)
+                    Text("Run Deletion").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary)
                 Button { storage?.cancelClean() } label: {
-                    Text("취소").frame(maxWidth: .infinity)
+                    Text("Cancel").frame(maxWidth: .infinity)
                 }
-                Text("정리 전 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.pixel(10)).foregroundStyle(.secondary)
             } else if storage?.cleanProgress?.phase == .running {
                 Button { storage?.cancelClean() } label: {
-                    Text("정리 취소").frame(maxWidth: .infinity)
+                    Text("Cancel Cleanup").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary)
-                Text("정리 중에는 새 빌드를 시작하지 마세요. 취소하면 진행 중인 항목까지만 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Do not start a new build while cleanup is running. Cancelling only applies items processed so far.").font(.pixel(10)).foregroundStyle(.secondary)
             } else if let phase = storage?.cleanProgress?.phase, phase == .done || phase == .cancelled || phase == .failed {
                 Button { storage?.dismissCleanProgress(); storage?.refresh() } label: {
-                    Text("다시 조회").frame(maxWidth: .infinity)
+                    Text("Check Again").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary)
             } else {
-                Toggle("공용 캐시 포함", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
+                Toggle("Include Shared Caches", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
                     .toggleStyle(.pixelToggle).font(.pixel(11)).disabled(storage?.busy == true)
                 Button { storage?.beginClean(paths: Set(selectedEntries.map(\.path))) } label: {
-                    Text("선택한 \(selectedEntries.count)개 정리 · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
+                    Text("Clean \(selectedEntries.count) selected · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
-                Text("정리하려면 Xcode와 xcodebuild를 종료하세요. 선택한 항목은 확인 후 영구 삭제됩니다.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.pixel(10)).foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.pixel)
     }
     private var settings: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Toggle("로그인 시 자동 실행", isOn: Binding(get: { model.loginEnabled }, set: { _ in model.toggleLogin?(); model.refreshContext() }))
+            Toggle("Launch at Login", isOn: Binding(get: { model.loginEnabled }, set: { _ in model.toggleLogin?(); model.refreshContext() }))
                 .toggleStyle(.pixelToggle)
-            if model.loginApproval { Button("시스템 설정에서 자동 실행 승인") { SMAppService.openSystemSettingsLoginItems() }.buttonStyle(.pixel) }
+            if model.loginApproval { Button("Approve automatic launch in System Settings") { SMAppService.openSystemSettingsLoginItems() }.buttonStyle(.pixel) }
             Divider()
             VStack(alignment: .leading, spacing: 8) {
-                Text("화면 전환 효과").font(.pixel(12))
-                Picker("화면 전환 효과", selection: $model.transitionStyle) {
+                Text("Page Transition").font(.pixel(12))
+                Picker("Page Transition", selection: $model.transitionStyle) {
                     ForEach(TransitionStyle.allCases, id: \.self) { Text($0.label).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("전환 속도").font(.pixel(12))
-                Picker("전환 속도", selection: $model.transitionSpeed) {
+                Text("Transition Speed").font(.pixel(12))
+                Picker("Transition Speed", selection: $model.transitionSpeed) {
                     ForEach(TransitionSpeed.allCases, id: \.self) { Text($0.label).tag($0) }
                 }.pickerStyle(.segmented).labelsHidden()
             }
             Divider()
-            Button("스토리지 알림 설정…") { storage?.openNotificationSettings() }
-            Button("DerivedData 폴더 열기") { storage?.openFolder() }
-            Button("활성 상태 보기 열기") { openActivityMonitor() }
-            Text("디스크는 1분마다, 캐시 용량은 1시간마다 확인합니다. 정리는 직접 실행할 때만 진행합니다.").font(.pixel(11)).foregroundStyle(.secondary)
-            Text("화면 모양은 macOS의 밝은 모드·어두운 모드 및 손쉬운 사용 설정을 따릅니다.").font(.pixel(11)).foregroundStyle(.secondary)
+            Button("Configure Storage Alerts…") { storage?.openNotificationSettings() }
+            Button("Open DerivedData Folder") { storage?.openFolder() }
+            Button("Open Activity Monitor") { openActivityMonitor() }
+            Text("Disk is checked every minute; cache size is checked every hour. Cleanup only runs when you start it.").font(.pixel(11)).foregroundStyle(.secondary)
+            Text("The appearance follows macOS Light/Dark Mode and accessibility settings.").font(.pixel(11)).foregroundStyle(.secondary)
             Divider()
-            Button("RetroStats 종료") { model.quit?() }.disabled(storage?.cleaning == true)
+            Button("Quit RetroStats") { model.quit?() }.disabled(storage?.cleaning == true)
         }.buttonStyle(.pixelGhost)
     }
     private func processValue(_ process: RankedProcess, order: ProcessOrder) -> String {

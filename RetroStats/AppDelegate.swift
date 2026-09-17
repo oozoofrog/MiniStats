@@ -35,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
                 warningIcon.heightAnchor.constraint(equalToConstant: 16)
             ])
         }
-        status.button?.setAccessibilityLabel("RetroStats 시스템 모니터")
+        status.button?.setAccessibilityLabel("RetroStats system monitor")
         storage = StorageController(changed: { [weak self] in self?.updateStorageWarning() }, openMenu: { [weak self] in self?.showStorageMenu() })
         dashboard.storage = storage
         dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }
@@ -89,11 +89,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let warning = storage.disk?.warning == true
         status.length = warning ? 60 : 38
         warningIcon.isHidden = !warning
-        warningIcon.image = warning ? NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "스토리지 50% 이상 사용 경고")?.withSymbolConfiguration(.init(paletteColors: [.black, .systemOrange])) : nil
+        warningIcon.image = warning ? NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Storage usage at or above 50%")?.withSymbolConfiguration(.init(paletteColors: [.black, .systemOrange])) : nil
         warningIcon.image?.isTemplate = false
-        let cpuLabel = dashboard.cpu.map { String(format: "CPU %.0f%%", $0.total) } ?? "CPU 측정 중"
-        let memoryLabel = dashboard.memory.map { "메모리 \(bytes($0.used)) / \(bytes(totalMemory))" } ?? "메모리 읽기 실패"
-        let diskLabel = storage.disk?.description ?? "스토리지 읽기 실패"
+        let cpuLabel = dashboard.cpu.map { String(format: "CPU %.0f%%", $0.total) } ?? "CPU measuring…"
+        let memoryLabel = dashboard.memory.map { "Memory \(bytes($0.used)) / \(bytes(totalMemory))" } ?? "Memory read failed"
+        let diskLabel = storage.disk?.description ?? "Storage read failed"
         status.button?.toolTip = [cpuLabel, memoryLabel, "↓ \(dashboard.download)  ↑ \(dashboard.upload)", diskLabel].joined(separator: "\n")
         status.button?.setAccessibilityValue([cpuLabel, memoryLabel, diskLabel].joined(separator: ", "))
     }
@@ -146,7 +146,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     private func showError(_ error: Error) {
         let alert = NSAlert()
-        alert.messageText = "자동 실행을 설정하지 못했습니다"
+        alert.messageText = "Could not configure automatic launch"
         alert.informativeText = error.localizedDescription
         alert.runModal()
     }

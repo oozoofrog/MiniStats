@@ -29,6 +29,6 @@ func cpuLoad(_ before: [UInt32], _ after: [UInt32]) -> CPULoad? {
 
 func loadAverageText() -> String {
     var load = [Double](repeating: 0, count: 3)
-    guard getloadavg(&load, 3) == 3 else { return "로드 평균: 읽기 실패" }
-    return String(format: "로드 평균: %.1f · %.1f · %.1f (1·5·15분, %d코어)", load[0], load[1], load[2], ProcessInfo.processInfo.activeProcessorCount)
+    guard getloadavg(&load, 3) == 3 else { return "Load average: read failed" }
+    return String(format: "Load average: %.1f · %.1f · %.1f (1·5·15 min, %d cores)", load[0], load[1], load[2], ProcessInfo.processInfo.activeProcessorCount)
 }

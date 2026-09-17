@@ -215,7 +215,7 @@ final class TransparentPopover {
     // MARK: - Show / close completion
 
     private func finishShowing() {
-        // opening animation 도중 close되었을 수도 있다.
+        // The popover may have been closed during the opening animation.
         guard state == .showing else {
             return
         }
@@ -252,28 +252,28 @@ final class TransparentPopover {
         switch preferredEdge {
 
         case .minY:
-            // anchor 아래
+            // Below the anchor.
             origin = NSPoint(
                 x: anchor.midX - size.width / 2,
                 y: anchor.minY - edgeSpacing - size.height
             )
 
         case .maxY:
-            // anchor 위
+            // Above the anchor.
             origin = NSPoint(
                 x: anchor.midX - size.width / 2,
                 y: anchor.maxY + edgeSpacing
             )
 
         case .minX:
-            // anchor 왼쪽
+            // To the left of the anchor.
             origin = NSPoint(
                 x: anchor.minX - edgeSpacing - size.width,
                 y: anchor.midY - size.height / 2
             )
 
         case .maxX:
-            // anchor 오른쪽
+            // To the right of the anchor.
             origin = NSPoint(
                 x: anchor.maxX + edgeSpacing,
                 y: anchor.midY - size.height / 2
@@ -355,12 +355,11 @@ final class TransparentPopover {
         }
 
         /*
-         NSApp은 현재 코드에서 popover를 띄우기 전에
-         activate(ignoringOtherApps:) 되고 있으므로,
-         다른 앱을 클릭하면 didResignActive가 발생한다.
+         NSApp is activated with activate(ignoringOtherApps:) before the
+         popover is shown, so clicking another app triggers didResignActive.
 
-         따라서 global event monitor가 필요 없다.
-         이 방식은 Input Monitoring 같은 추가 권한도 요구하지 않는다.
+         A global event monitor is therefore unnecessary.
+         This also avoids requiring additional permissions such as Input Monitoring.
          */
 
         resignActiveObserver =
@@ -396,31 +395,30 @@ final class TransparentPopover {
                     return event
                 }
 
-                // Panel 안을 클릭한 경우 유지.
+                // Keep the popover open when clicking inside the panel.
                 if event.window === panel {
                     return event
                 }
 
                 /*
-                 status item 자체를 클릭한 경우 여기서 닫지 않는다.
+                 Do not close here when the status item itself was clicked.
 
-                 그렇지 않으면:
+                 Otherwise:
                      event monitor -> close
-                     status button action -> isShown == false -> 다시 open
+                     status button action -> isShown == false -> open again
 
-                 순서가 되어 한 번의 클릭으로 다시 열리는 문제가 생긴다.
+                 This ordering would reopen the popover from a single click.
 
-                 status button action의 toggleDashboard()에게
-                 닫는 동작을 맡긴다.
+                 Let the status button action's toggleDashboard() handle closing.
                  */
                 if isEventInsidePositioningView(event) {
                     return event
                 }
 
-                // 동일 앱의 다른 UI 클릭.
+                // Click in another part of this app.
                 performClose(nil)
 
-                // 원래 클릭은 그대로 전달.
+                // Pass the original click through.
                 return event
             }
     }

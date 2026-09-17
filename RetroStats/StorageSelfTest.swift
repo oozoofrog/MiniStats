@@ -12,15 +12,15 @@ func storageSelfTest() throws {
     precondition(DiskUsage(total: 100, free: 40, available: 55)?.purgeable == 15)
     precondition(DiskUsage(total: 100, free: 40, available: 30)?.purgeable == 0)
     precondition(DiskUsage(total: 100, free: 40)?.detail == nil)
-    let data = Data(#"{"generated_at":0,"hours":8,"total_bytes":2048,"candidate_bytes":1024,"items":[{"path":"/tmp/테스트","size":1024,"workspace":"/tmp/App.xcodeproj","candidate":true},{"path":"/tmp/keep","size":1024,"workspace":"","candidate":false}]}"#.utf8)
+    let data = Data(#"{"generated_at":0,"hours":8,"total_bytes":2048,"candidate_bytes":1024,"items":[{"path":"/tmp/test","size":1024,"workspace":"/tmp/App.xcodeproj","candidate":true},{"path":"/tmp/keep","size":1024,"workspace":"","candidate":false}]}"#.utf8)
     let report = try CacheReport.decode(data)
     precondition(report.candidates.count == 1 && report.totalBytes == 2048)
-    precondition(report.candidates[0].path == "/tmp/테스트")
+    precondition(report.candidates[0].path == "/tmp/test")
     let invalid = Data(String(decoding: data, as: UTF8.self).replacingOccurrences(of: "2048", with: "-1").utf8)
     precondition((try? CacheReport.decode(invalid)) == nil)
     guard let disk = DiskUsage.read() else { fatalError("Live storage read failed") }
     print("PASS: storage 49.99/50/50.01% threshold, capacity bounds, purgeable math, DerivedData report validation")
-    print(disk.description + " · " + (disk.detail ?? "Finder 기준 사용 가능: 없음"))
+    print(disk.description + " · " + (disk.detail ?? "Available according to Finder: none"))
 }
 
 func printNotificationStatus() {

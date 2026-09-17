@@ -7,7 +7,7 @@ import Darwin
 /// classification, 8-hour eligibility, per-delete recheck, and Xcode/xcodebuild
 /// idle guard. Scans run concurrently with Swift Concurrency.
 struct DerivedDataCleaner {
-    enum Kind: String { case project = "프로젝트", shared = "공용", other = "기타" }
+    enum Kind: String { case project = "Project", shared = "Shared", other = "Other" }
 
     enum CleanerError: Error, LocalizedError {
         case crossDevice(String)
@@ -19,12 +19,12 @@ struct DerivedDataCleaner {
 
         var errorDescription: String? {
             switch self {
-            case .crossDevice(let p): return "다른 파일시스템이 포함되어 있어 건너뜁니다: \(p)"
-            case .xcodeRunning(let s): return "정리하려면 먼저 종료하세요: \(s)"
-            case .pathChanged(let p): return "삭제 경로가 변경되었거나 마운트 지점입니다: \(p)"
-            case .brokenPlist(let p): return "info.plist 해석 실패: \(p)"
-            case .invalidWorkspace(let p): return "WorkspacePath가 문자열이 아닙니다: \(p)"
-            case .deleteBlocked(let p): return "안전한 삭제를 진행할 수 없습니다: \(p)"
+            case .crossDevice(let p): return "Skipping because it contains another filesystem: \(p)"
+            case .xcodeRunning(let s): return "Close these processes before cleaning: \(s)"
+            case .pathChanged(let p): return "The deletion path changed or is a mount point: \(p)"
+            case .brokenPlist(let p): return "Could not parse info.plist: \(p)"
+            case .invalidWorkspace(let p): return "WorkspacePath is not a string: \(p)"
+            case .deleteBlocked(let p): return "Safe deletion is not allowed: \(p)"
             }
         }
     }
@@ -99,7 +99,7 @@ struct DerivedDataCleaner {
         var initial = stat()
         guard lstat(path, &initial) == 0 else {
             throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno),
-                          userInfo: [NSLocalizedDescriptionKey: "조회 실패: \(path)"])
+                          userInfo: [NSLocalizedDescriptionKey: "Scan failed: \(path)"])
         }
         let initialDev = initial.st_dev
         let now = Date().timeIntervalSince1970

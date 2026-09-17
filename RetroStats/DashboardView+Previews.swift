@@ -85,7 +85,7 @@ private func makeFailedProgress() -> CleanProgress {
             .init(path: candidates[2].path, size: candidates[2].size, state: .pending),
         ],
         freedBytes: candidates[0].size, cancelled: false, currentPath: nil,
-        summary: nil, error: "일부 항목을 삭제할 수 없습니다: 작업이 허용되지 않습니다 (운영 체제 오류 -1)"
+        summary: nil, error: "Some items could not be deleted: operation not permitted (OS error -1)"
     )
 }
 
@@ -98,43 +98,43 @@ private func storageModel(_ storage: StorageController) -> DashboardModel {
 
 // MARK: - DerivedData cleanup screen
 
-#Preview("스토리지 정리 — 후보 목록") {
+#Preview("Storage Cleanup — Candidate List") {
     DashboardView(model: storageModel(.preview(report: makeReport())))
 }
 
-#Preview("스토리지 정리 — 후보 없음") {
+#Preview("Storage Cleanup — No Candidates") {
     DashboardView(model: storageModel(.preview(report: makeReport(entries: staleEntries))))
 }
 
-#Preview("스토리지 정리 — 용량 조회 중") {
+#Preview("Storage Cleanup — Checking Capacity") {
     DashboardView(model: storageModel(.preview(busy: true)))
 }
 
-#Preview("스토리지 정리 — 스캔 진행") {
+#Preview("Storage Cleanup — Scan in Progress") {
     DashboardView(model: storageModel(.preview(busy: true, scanPath: "/Users/dev/Library/Developer/Xcode/DerivedData/MyApp-gjklmneeqwertyuiopasdfgh")))
 }
 
-#Preview("스토리지 정리 — 조회 오류") {
-    DashboardView(model: storageModel(.preview(report: makeReport(), lastError: "DerivedData 경로를 읽을 수 없습니다: 권한 거부됨")))
+#Preview("Storage Cleanup — Scan Error") {
+    DashboardView(model: storageModel(.preview(report: makeReport(), lastError: "Cannot read the DerivedData path: permission denied")))
 }
 
-#Preview("스토리지 정리 — 삭제 확인") {
+#Preview("Storage Cleanup — Confirm Deletion") {
     DashboardView(model: storageModel(.preview(cleanProgress: makeConfirmProgress())))
 }
 
-#Preview("스토리지 정리 — 정리 진행 중") {
+#Preview("Storage Cleanup — Cleanup in Progress") {
     DashboardView(model: storageModel(.preview(cleanProgress: makeRunningProgress())))
 }
 
-#Preview("스토리지 정리 — 정리 완료") {
+#Preview("Storage Cleanup — Cleanup Complete") {
     DashboardView(model: storageModel(.preview(cleanProgress: makeDoneProgress())))
 }
 
-#Preview("스토리지 정리 — 정리 취소") {
+#Preview("Storage Cleanup — Cleanup Cancelled") {
     DashboardView(model: storageModel(.preview(cleanProgress: makeCancelledProgress())))
 }
 
-#Preview("스토리지 정리 — 정리 실패") {
+#Preview("Storage Cleanup — Cleanup Failed") {
     DashboardView(model: storageModel(.preview(cleanProgress: makeFailedProgress())))
 }
 #endif

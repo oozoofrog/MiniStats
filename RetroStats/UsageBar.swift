@@ -15,6 +15,6 @@ struct UsageBar: View {
                     else { RoundedRectangle(cornerRadius: 1, style: .continuous).fill(on ? color : color.opacity(0.08)) }
                 }
             }
-        }.frame(height: 10).accessibilityLabel("사용률").accessibilityValue(String(format: "%.0f%%", percent))
+        }.frame(height: 10).accessibilityLabel("Usage").accessibilityValue(String(format: "%.0f%%", percent))
     }
 }

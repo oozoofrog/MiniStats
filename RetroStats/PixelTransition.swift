@@ -318,9 +318,9 @@ enum TransitionStyle: String, CaseIterable {
     /// Display label for the settings picker.
     var label: String {
         switch self {
-        case .wave: return "웨이브"
-        case .fade: return "페이드"
-        case .flip: return "플립"
+        case .wave: return "Wave"
+        case .fade: return "Fade"
+        case .flip: return "Flip"
         }
     }
 
@@ -357,9 +357,9 @@ enum TransitionSpeed: String, CaseIterable {
     /// Display label for the settings picker.
     var label: String {
         switch self {
-        case .slow: return "느림"
-        case .normal: return "보통"
-        case .fast: return "빠름"
+        case .slow: return "Slow"
+        case .normal: return "Normal"
+        case .fast: return "Fast"
         }
     }
 }

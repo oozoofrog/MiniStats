@@ -1,7 +1,7 @@
 import Foundation
 
 enum ProcessOrder: String, CaseIterable, Identifiable {
-    case cpu = "CPU", memory = "메모리"
+    case cpu = "CPU", memory = "Memory"
     var id: String { rawValue }
     func sorted(_ processes: [RankedProcess]) -> [RankedProcess] {
         let eligible = self == .cpu ? processes.filter { $0.cpu != nil } : processes

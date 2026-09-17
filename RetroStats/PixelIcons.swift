@@ -238,7 +238,7 @@ struct PixelHourglass: View {
     .frame(width: 240, height: 240)
 }
 
-#Preview("PixelRefresh — 애니메이션") {
+#Preview("PixelRefresh — Animated") {
     VStack(spacing: 28) {
         PixelRefresh(size: 16, color: .primary, animating: true)
         Divider().frame(width: 120)
@@ -250,7 +250,7 @@ struct PixelHourglass: View {
     .frame(width: 260, height: 280)
 }
 
-#Preview("PixelRefresh — 정지") {
+#Preview("PixelRefresh — Idle") {
     VStack(spacing: 28) {
         PixelRefresh(size: 16, color: .primary, animating: false)
         Divider().frame(width: 120)

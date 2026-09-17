@@ -2,7 +2,7 @@ import AppKit
 import UserNotifications
 
 final class StorageController: NSObject, UNUserNotificationCenterDelegate {
-    let menuItem = NSMenuItem(title: "스토리지 정리", action: nil, keyEquivalent: "")
+    let menuItem = NSMenuItem(title: "Storage Cleanup", action: nil, keyEquivalent: "")
     private(set) var disk: DiskUsage?
     private(set) var cleaning = false
     private(set) var report: CacheReport?
@@ -45,7 +45,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
             center.removeDeliveredNotifications(withIdentifiers: ["storage-warning-preview"])
             center.removePendingNotificationRequests(withIdentifiers: ["storage-warning-preview"])
         }
-        let action = UNNotificationAction(identifier: "open-storage", title: "스토리지 정리", options: .foreground)
+        let action = UNNotificationAction(identifier: "open-storage", title: "Storage Cleanup", options: .foreground)
         center.setNotificationCategories([UNNotificationCategory(identifier: "storage", actions: [action], intentIdentifiers: [], options: [])])
         center.requestAuthorization(options: [.alert]) { allowed, error in
             DispatchQueue.main.async {
@@ -94,8 +94,8 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                     return
                 }
                 let content = UNMutableNotificationContent()
-                content.title = self.preview ? "테스트 · 스토리지 정리 알림" : "스토리지 50% 이상 사용"
-                content.body = String(format: "현재 %.1f%% 사용 중입니다. RetroStats의 ‘스토리지 정리’에서 오래된 DerivedData를 확인하고 정리하세요.", disk.percent)
+                content.title = self.preview ? "Test · Storage cleanup alert" : "Storage usage at or above 50%"
+                content.body = String(format: "Currently using %.1f%%. Open RetroStats' \"Storage Cleanup\" to review and remove old DerivedData.", disk.percent)
                 content.categoryIdentifier = "storage"
                 center.add(UNNotificationRequest(identifier: self.notificationID, content: content, trigger: nil)) { error in
                     DispatchQueue.main.async {
@@ -122,7 +122,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     }
 
     private func rebuildMenu() {
-        menuItem.title = disk?.warning == true ? "⚠︎ 스토리지 정리 · 50% 이상 사용" : "스토리지 정리"
+        menuItem.title = disk?.warning == true ? "⚠︎ Storage Cleanup · 50%+ used" : "Storage Cleanup"
         let menu = menuItem.submenu ?? NSMenu()
         menu.removeAllItems()
         menu.autoenablesItems = false
@@ -133,17 +133,17 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
             menu.addItem(item)
             return item
         }
-        _ = add(disk?.description ?? "스토리지: 읽기 실패")
-        if preview { _ = add("테스트: 디스크 사용률만 55%로 표시") }
-        if disk?.warning == true { _ = add("⚠︎ 50% 이상 사용 — 정리 후보를 확인하세요") }
+        _ = add(disk?.description ?? "Storage: read failed")
+        if preview { _ = add("Test: show disk usage as 55% only") }
+        if disk?.warning == true { _ = add("⚠︎ 50%+ used — review cleanup candidates") }
         menu.addItem(.separator())
         _ = add("DerivedData")
-        if busy { _ = add(cleaning ? "정리 중…" : "용량 조회 중…") }
+        if busy { _ = add(cleaning ? "Cleaning…" : "Checking capacity…") }
         if let report {
-            _ = add("전체 \(report.items.count)개 · \(bytes(UInt64(report.totalBytes)))")
-            _ = add("8시간 기준 정리 후보 \(report.candidates.count)개 · \(bytes(UInt64(report.candidateBytes)))")
-            _ = add("최근 조회: " + DateFormatter.localizedString(from: Date(timeIntervalSince1970: report.generatedAt), dateStyle: .short, timeStyle: .short))
-            let projects = add("프로젝트별 용량 · Finder에서 보기")
+            _ = add("\(report.items.count) total items · \(bytes(UInt64(report.totalBytes)))")
+            _ = add("\(report.candidates.count) cleanup candidates older than 8 hours · \(bytes(UInt64(report.candidateBytes)))")
+            _ = add("Last checked: " + englishDateTime(Date(timeIntervalSince1970: report.generatedAt)))
+            let projects = add("Project sizes · Reveal in Finder")
             projects.isEnabled = true
             let submenu = NSMenu()
             submenu.autoenablesItems = false
@@ -152,23 +152,23 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 let item = NSMenuItem(title: "\(entry.candidate ? "● " : "")\(bytes(UInt64(entry.size)))  \(name)", action: #selector(revealCache(_:)), keyEquivalent: "")
                 item.target = self
                 item.representedObject = entry.path
-                item.toolTip = entry.path + (entry.workspace.isEmpty ? "" : "\n프로젝트: " + entry.workspace)
+                item.toolTip = entry.path + (entry.workspace.isEmpty ? "" : "\nProject: " + entry.workspace)
                 submenu.addItem(item)
             }
             projects.submenu = submenu
         }
-        if let lastError { _ = add("조회/정리 오류 — 자세히 보기…", #selector(showError)).toolTip = lastError }
+        if let lastError { _ = add("Scan/cleanup error — Show details…", #selector(showError)).toolTip = lastError }
         menu.addItem(.separator())
-        _ = add("지금 다시 조회", #selector(refresh), enabled: !busy)
-        _ = add("8시간 이상 된 DerivedData 정리…", #selector(confirmAllClean), enabled: !busy && lastError == nil && !(report?.candidates.isEmpty ?? true))
-        let shared = add("공용 캐시 포함", #selector(toggleShared), enabled: !busy)
+        _ = add("Check now", #selector(refresh), enabled: !busy)
+        _ = add("Clean DerivedData older than 8 hours…", #selector(confirmAllClean), enabled: !busy && lastError == nil && !(report?.candidates.isEmpty ?? true))
+        let shared = add("Include shared caches", #selector(toggleShared), enabled: !busy)
         shared.state = includeShared ? .on : .off
-        _ = add("DerivedData 폴더 열기", #selector(openFolder))
+        _ = add("Open DerivedData folder", #selector(openFolder))
         menu.addItem(.separator())
-        _ = add("디스크 확인: 1분 · DerivedData 조회: 1시간")
-        _ = add("정리는 직접 실행 · Xcode 종료 필요")
-        _ = add(notificationsAllowed ? "정리 알림 설정…" : "정리 알림 꺼짐 — 허용하기…", #selector(openNotificationSettings))
-        if let notificationError { _ = add("알림 오류: " + notificationError) }
+        _ = add("Disk check: 1 min · DerivedData scan: 1 hour")
+        _ = add("Cleanup is manual · Quit Xcode first")
+        _ = add(notificationsAllowed ? "Cleanup alerts…" : "Cleanup alerts off — Enable…", #selector(openNotificationSettings))
+        if let notificationError { _ = add("Notification error: " + notificationError) }
         menuItem.submenu = menu
     }
 
@@ -198,7 +198,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer/Xcode/DerivedData"))
     }
 
-    @objc private func showError() { alert("DerivedData 작업 오류", lastError ?? "오류 정보가 없습니다.") }
+    @objc private func showError() { alert("DerivedData operation failed", lastError ?? "No error details are available.") }
 
     @objc private func confirmAllClean() {
         guard beginClean(paths: Set(report?.candidates.map(\.path) ?? [])) else { return }
@@ -308,13 +308,13 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 progress.items[idx].state = .kept
             }
         case .done(let removed, let freedBytes):
-            progress.summary = "정리 완료: \(removed)개, 삭제한 항목의 할당 용량 합계 \(bytes(UInt64(freedBytes)))"
+            progress.summary = "Cleanup complete: \(removed) items, allocated space freed \(bytes(UInt64(freedBytes)))"
             progress.phase = .done
             progress.currentPath = nil
             let log = progress.items.map { item -> String in
                 switch item.state {
-                case .deleted: return "삭제: \(item.path)"
-                case .kept: return "유지 (조회 이후 변경됨): \(item.path)"
+                case .deleted: return "Deleted: \(item.path)"
+                case .kept: return "Kept (changed after scan): \(item.path)"
                 default: return "\(item.path)"
                 }
             }.joined(separator: "\n") + "\n" + (progress.summary ?? "")
@@ -374,7 +374,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         let dialog = NSAlert()
         dialog.messageText = title
         dialog.informativeText = message
-        dialog.addButton(withTitle: "확인")
+        dialog.addButton(withTitle: "OK")
         dialog.runModal()
     }
 

@@ -31,16 +31,16 @@ func sysctlValue<T>(_ name: String, _ initial: T) -> T? {
 }
 
 func swapText() -> String {
-    guard let swap = sysctlValue("vm.swapusage", xsw_usage()) else { return "스왑: 읽기 실패" }
-    return swap.xsu_total == 0 ? "스왑: 사용 안 함" : "스왑: \(bytes(swap.xsu_used)) / \(bytes(swap.xsu_total))"
+    guard let swap = sysctlValue("vm.swapusage", xsw_usage()) else { return "Swap: read failed" }
+    return swap.xsu_total == 0 ? "Swap: not in use" : "Swap: \(bytes(swap.xsu_used)) / \(bytes(swap.xsu_total))"
 }
 
 func memoryPressureText() -> String {
     switch sysctlValue("kern.memorystatus_vm_pressure_level", Int32(0)) {
-    case 1: return "메모리 압력: 정상"
-    case 2: return "메모리 압력: 경고"
-    case 4: return "메모리 압력: 위험"
-    case let level?: return "메모리 압력: 알 수 없음 (\(level))"
-    case nil: return "메모리 압력: 읽기 실패"
+    case 1: return "Memory pressure: normal"
+    case 2: return "Memory pressure: warning"
+    case 4: return "Memory pressure: critical"
+    case let level?: return "Memory pressure: unknown (\(level))"
+    case nil: return "Memory pressure: read failed"
     }
 }
