@@ -216,13 +216,14 @@ struct FadeTransition: PageTransition {
 
 // MARK: - FlipTransition
 
-/// Pixel-flip transition built on real 3D rotation. At the 1×1 stage the whole
-/// screen is a single cell: the old page (front face) and new page (back face)
-/// are stacked and the stack rotates on the Y axis from 0° to 180°. Below 90°
-/// the front face shows; at 90° the faces swap so the back face (new page)
-/// becomes visible, reading as one panel flipping over. Later stages split the
-/// screen into a grid of such cells (2×2, 4×4, …) each carrying the full page
-/// view offset+clipped to its tile.
+/// Flip-clock transition. The screen is one card split into top and bottom
+/// halves that fold on the X axis around the screen's horizontal midline. The
+/// transition is sequential: the old front folds away (0→90°) in the first half
+/// of progress, then the new back unfolds (90→0°) in the second half. The face
+/// swap happens at progress 0.5 (both edges-on). The top half's axis is its
+/// bottom edge; the bottom half's axis is its top edge. Rotation is 3D on X so
+/// the back face can show the new page (a 2D rotation can only mirror the same
+/// view); perspective is set very large to avoid foreshortening.
 struct FlipTransition: PageTransition {
     var seed: Int
     var color: Color
@@ -234,17 +235,42 @@ struct FlipTransition: PageTransition {
     static let gridSize: Int = 1
 
     /// Maps transition progress (0…1) to a half-fold angle in degrees
-    /// (0°…90°). Each half of the card folds through this range: the old front
-    /// folds from 0° to 90° (away), the new back unfolds from 90° to 0°. Clamped
-    /// so out-of-range progress can't overshoot.
+    /// (0°…90°). Used as the building block for both phases. Clamped so
+    /// out-of-range progress can't overshoot.
     static func flipAngle(progress: Double) -> Double {
         max(0, min(1, progress)) * 90
     }
 
-    /// Whether the front face (old page) is the visible side at `angle`. The
-    /// swap to the back face (new page) happens at 90° (fully folded).
-    static func isFrontFace(angle: Double) -> Bool {
-        angle < 90
+    /// The transition is sequential. The old front folds out during the FIRST
+    /// half of progress (0…0.5 → sub-progress 0…1); the new back unfolds during
+    /// the SECOND half (0.5…1 → sub-progress 0…1). Each phase clamps outside its
+    /// window so the old holds at 90° (out of view) while the new unfolds, and
+    /// the new holds at 90° (still folded) while the old folds out.
+    static func oldPhaseProgress(_ progress: Double) -> Double {
+        max(0, min(1, progress * 2))
+    }
+
+    static func newPhaseProgress(_ progress: Double) -> Double {
+        max(0, min(1, (progress - 0.5) * 2))
+    }
+
+    /// Old front-face angle at `progress`: 0°→90° across the first half, then
+    /// holds 90° (folded away, out of view) for the second half.
+    static func oldHalfAngle(progress: Double) -> Double {
+        flipAngle(progress: oldPhaseProgress(progress))
+    }
+
+    /// New back-face angle at `progress`: holds 90° (folded) for the first half,
+    /// then 90°→0° across the second half as it unfolds into view.
+    static func newHalfAngle(progress: Double) -> Double {
+        90 - flipAngle(progress: newPhaseProgress(progress))
+    }
+
+    /// Whether the old front face is the visible side at `progress`. The swap
+    /// to the new back face happens at progress 0.5 (when old reaches 90° and
+    /// new is still at 90° — both edges-on, neither visible).
+    static func isFrontFace(progress: Double) -> Bool {
+        progress < 0.5
     }
 
     /// Rotation anchor for a half of the card. The top half folds around its
@@ -252,19 +278,6 @@ struct FlipTransition: PageTransition {
     /// (also the midline). The two anchors meet at the midline.
     static func halfAnchor(isTop: Bool) -> UnitPoint {
         isTop ? .bottom : .top
-    }
-
-    /// Old front-face angle for a half at `progress`: folds from 0° (flat) to
-    /// 90° (folded away). Drives the old page rotating out of view.
-    static func oldHalfAngle(progress: Double) -> Double {
-        flipAngle(progress: progress)
-    }
-
-    /// New back-face angle for a half at `progress`: starts folded at 90° and
-    /// unfolds to 0°. Drives the new page rotating into view. Complementary to
-    /// `oldHalfAngle` (sum to 90° at every progress).
-    static func newHalfAngle(progress: Double) -> Double {
-        90 - flipAngle(progress: progress)
     }
 
     /// Mask members are unused because `isRotational` is `true`; `TransitionContainer`
@@ -284,7 +297,7 @@ struct FlipTransition: PageTransition {
                     let halfH = size.height / 2
                     let oldAngle = Self.oldHalfAngle(progress: p)
                     let newAngle = Self.newHalfAngle(progress: p)
-                    let front = Self.isFrontFace(angle: oldAngle)
+                    let front = Self.isFrontFace(progress: p)
                     ZStack(alignment: .topLeading) {
                         // Top half: folds down around its bottom edge (midline).
                         flipHalf(content: old, size: size, halfOriginY: 0, halfH: halfH,
@@ -307,9 +320,11 @@ struct FlipTransition: PageTransition {
     /// One half of the card. `content` is the full page view; `halfOriginY` is
     /// the half's top edge in screen coordinates (0 or halfH). The page is
     /// framed to the full screen, offset so the half's region sits at the
-    /// origin, then clipped to `width × halfH` and rotated on X around `anchor`.
-    /// Uses `rotationEffect` (2D) — no z-depth perspective — per the flip-clock
-    /// stage under inspection.
+    /// origin, then clipped to `width × halfH` and rotated on the X axis (3D)
+    /// around `anchor`. Perspective is set very large so there is no
+    /// foreshortening, but the 3D axis is what allows the back face to show
+    /// different content (the new page) than the front (the old page) — a 2D
+    /// rotation can only mirror the same view, so it cannot represent a flip.
     private func flipHalf(content: AnyView, size: CGSize, halfOriginY: CGFloat, halfH: CGFloat,
                           angle: Double, anchor: UnitPoint, visible: Bool) -> some View {
         content
@@ -317,7 +332,8 @@ struct FlipTransition: PageTransition {
             .offset(x: 0, y: -halfOriginY)
             .frame(width: size.width, height: halfH, alignment: .topLeading)
             .clipped()
-            .rotationEffect(.degrees(angle), anchor: anchor)
+            .rotation3DEffect(.degrees(angle), axis: (x: 1, y: 0, z: 0),
+                              anchor: anchor, perspective: 1_000_000)
             .opacity(visible ? 1 : 0)
     }
 }
