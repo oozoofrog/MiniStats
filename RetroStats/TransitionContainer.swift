@@ -24,15 +24,23 @@ struct TransitionContainer<Content: View>: View {
             content(currentPage)
                 .opacity(isTransitioning ? 0 : 1)
             if isTransitioning {
-                content(previousPage!)
-                    .mask {
-                        transition.oldPageMask(progress: progress)
-                    }
-                content(currentPage)
-                    .mask {
-                        transition.newPageMask(progress: progress)
-                    }
-                transition.overlay(progress: progress, start: transitionStart)
+                if transition.isRotational {
+                    transition.rotationBody(
+                        old: AnyView(content(previousPage!)),
+                        new: AnyView(content(currentPage)),
+                        progress: progress
+                    )
+                } else {
+                    content(previousPage!)
+                        .mask {
+                            transition.oldPageMask(progress: progress)
+                        }
+                    content(currentPage)
+                        .mask {
+                            transition.newPageMask(progress: progress)
+                        }
+                    transition.overlay(progress: progress, start: transitionStart)
+                }
             }
         }
         .onChange(of: currentPage) { old, new in

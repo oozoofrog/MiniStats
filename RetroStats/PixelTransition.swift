@@ -121,14 +121,32 @@ struct PixelWaveMaskShape: Shape {
 /// type encodes one visual style (wave, fade, flip, etc.). Masks and overlay are
 /// returned as `AnyView` so the active style can be chosen at runtime from
 /// user settings without a separate generic `TransitionContainer` per style.
+///
+/// A style may instead opt into rotational rendering via `isRotational`: the
+/// container then calls `rotationBody(old:new:progress:)` with the actual page
+/// views so the transition can rotate real content (e.g. a 3D card flip) rather
+/// than mask it. Mask-based styles leave `isRotational` at its default `false`.
 protocol PageTransition {
     var seed: Int { get }
     var color: Color { get }
     var duration: Double { get }
+    var isRotational: Bool { get }
 
     func newPageMask(progress: Double) -> AnyView
     func oldPageMask(progress: Double) -> AnyView
     func overlay(progress: Double, start: Date?) -> AnyView
+    func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView
+}
+
+extension PageTransition {
+    /// Mask-based styles return `false` here. A rotational style overrides to
+    /// `true` so `TransitionContainer` uses `rotationBody` instead of masks.
+    var isRotational: Bool { false }
+
+    /// Default no-op; only rotational styles implement this.
+    func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView {
+        AnyView(EmptyView())
+    }
 }
 
 // MARK: - WaveTransition
@@ -193,117 +211,55 @@ struct FadeTransition: PageTransition {
     }
 }
 
-// MARK: - FlipMaskShape
-
-/// Animatable clip shape for the pixel-flip transition. The screen is divided
-/// into a grid of `cellSize` cells. Each cell flips on a diagonal wave: a cell
-/// reaches its half-flip point when `progress` passes its diagonal delay, and
-/// from that point it shows its back face (new page) instead of its front face
-/// (old page). When `inverted` is false the shape fills back-face cells
-/// (reveals the NEW page); when true it fills front-face cells (clips the OLD
-/// page). `seed` is reserved for future per-transition variation; the diagonal
-/// wave is stable so mask endpoints are deterministic.
-struct FlipMaskShape: Shape {
-    var seed: Int
-    var animatableData: Double  // progress 0...1
-    var inverted: Bool = false
-    var cellSize: CGFloat = 8
-
-    func path(in rect: CGRect) -> Path {
-        let t = max(0, min(1, animatableData))
-        let cols = max(1, Int((rect.width + cellSize - 1) / cellSize))
-        let rows = max(1, Int((rect.height + cellSize - 1) / cellSize))
-        var path = Path()
-        for j in 0..<rows {
-            for i in 0..<cols {
-                let isBack = Self.isBackFace(progress: t, i: i, j: j, cols: cols, rows: rows)
-                guard isBack != inverted else { continue }
-                let x = CGFloat(i) * cellSize
-                let y = CGFloat(j) * cellSize
-                path.addRect(CGRect(x: x, y: y, width: cellSize, height: cellSize))
-            }
-        }
-        return path
-    }
-
-    /// Per-cell flip progress (0 at rest, 1 at fully flipped) for cell (i, j).
-    /// `band` spreads the wave so the half-flip point sweeps diagonally instead
-    /// of all cells flipping at once. Exposed so the overlay can render flip
-    /// edges from the same curve the masks use.
-    static func cellProgress(_ progress: Double, i: Int, j: Int, cols: Int, rows: Int) -> Double {
-        let t = max(0, min(1, progress))
-        let denom = max(1, cols + rows - 1)
-        let delay = Double(i + j) / Double(denom)
-        let band: Double = 1.0
-        return max(0, min(1, t * (1 + band) - delay * band))
-    }
-
-    /// Whether cell (i, j) shows its back face at a given progress: true once
-    /// the cell has passed its half-flip point.
-    static func isBackFace(progress: Double, i: Int, j: Int, cols: Int, rows: Int) -> Bool {
-        cellProgress(progress, i: i, j: j, cols: cols, rows: rows) >= 0.5
-    }
-
-    /// Half-width of the seam band around the half-flip point (cellT==0.5).
-    /// Cells whose cellT falls outside [0.5 - half, 0.5 + half] draw no seam, so
-    /// the overlay traces only the narrow diagonal flip edge instead of every
-    /// flipping cell (which at mid-progress is nearly the whole grid).
-    static let seamBandHalf: Double = 0.05
-
-    /// Seam brightness for a cell at `cellT` (0...1). Peaks at the half-flip
-    /// (cellT==0.5), falls linearly to 0 at the band edge, and is 0 outside the
-    /// band. The overlay skips any cell where this returns 0.
-    static func seamAlpha(_ cellT: Double) -> Double {
-        let d = abs(cellT - 0.5)
-        guard d <= seamBandHalf else { return 0 }
-        return (1 - d / seamBandHalf) * 0.45
-    }
-}
-
 // MARK: - FlipTransition
 
-/// Pixel-flip transition: the screen is tiled into a grid and each cell flips
-/// on a diagonal wave, swapping from the old page (front face) to the new page
-/// (back face). The overlay draws the flip edge — a thin vertical seam at each
-/// cell's rotation axis, brightest at the half-flip — so the swap reads as a
-/// 3D flip rather than a flat checkerboard.
+/// Pixel-flip transition built on real 3D rotation. At the 1×1 stage the whole
+/// screen is a single cell: the old page (front face) and new page (back face)
+/// are stacked and the stack rotates on the Y axis from 0° to 180°. Below 90°
+/// the front face shows; at 90° the faces swap so the back face (new page)
+/// becomes visible, reading as one panel flipping over. Later stages split the
+/// screen into a grid of such cells (2×2, 4×4, …) each carrying the full page
+/// view offset+clipped to its tile.
 struct FlipTransition: PageTransition {
     var seed: Int
     var color: Color
     var duration: Double
 
-    private static let cellSize: CGFloat = 8
+    var isRotational: Bool { true }
 
-    func newPageMask(progress: Double) -> AnyView {
-        AnyView(FlipMaskShape(seed: seed, animatableData: progress, cellSize: Self.cellSize))
+    /// Maps transition progress (0…1) to a Y-axis rotation angle in degrees
+    /// (0°…180°). Clamped so out-of-range progress can't overshoot.
+    static func flipAngle(progress: Double) -> Double {
+        max(0, min(1, progress)) * 180
     }
 
-    func oldPageMask(progress: Double) -> AnyView {
-        AnyView(FlipMaskShape(seed: seed, animatableData: progress, inverted: true, cellSize: Self.cellSize))
+    /// Whether the front face (old page) is the visible side at `angle`. The
+    /// swap to the back face (new page) happens at 90°.
+    static func isFrontFace(angle: Double) -> Bool {
+        angle < 90
     }
 
-    func overlay(progress: Double, start: Date?) -> AnyView {
-        AnyView(TimelineView(.animation) { context in
-            let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / duration)) }
-                ?? max(0, min(1, progress))
-            Canvas { ctx, size in
-                let cs = Self.cellSize
-                let cols = max(1, Int((size.width + cs - 1) / cs))
-                let rows = max(1, Int((size.height + cs - 1) / cs))
-                for j in 0..<rows {
-                    for i in 0..<cols {
-                        let cellT = FlipMaskShape.cellProgress(p, i: i, j: j, cols: cols, rows: rows)
-                        let alpha = FlipMaskShape.seamAlpha(cellT)
-                        guard alpha > 0 else { continue }
-                        let cx = CGFloat(i) * cs + cs / 2
-                        let y = CGFloat(j) * cs
-                        let seam = CGRect(x: cx - 1, y: y, width: 2, height: cs)
-                        ctx.fill(Path(seam), with: .color(color.opacity(alpha)))
-                    }
-                }
+    /// Mask members are unused because `isRotational` is `true`; `TransitionContainer`
+    /// calls `rotationBody` instead. Kept as no-ops to satisfy the protocol.
+    func newPageMask(progress: Double) -> AnyView { AnyView(EmptyView()) }
+    func oldPageMask(progress: Double) -> AnyView { AnyView(EmptyView()) }
+    func overlay(progress: Double, start: Date?) -> AnyView { AnyView(EmptyView()) }
+
+    func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView {
+        let angle = Self.flipAngle(progress: progress)
+        let front = Self.isFrontFace(angle: angle)
+        return AnyView(
+            ZStack {
+                old
+                    .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0),
+                                      anchor: .center, perspective: 1)
+                    .opacity(front ? 1 : 0)
+                new
+                    .rotation3DEffect(.degrees(angle - 180), axis: (x: 0, y: 1, z: 0),
+                                      anchor: .center, perspective: 1)
+                    .opacity(front ? 0 : 1)
             }
-            .allowsHitTesting(false)
-        })
+        )
     }
 }
 

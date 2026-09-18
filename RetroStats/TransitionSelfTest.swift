@@ -38,75 +38,25 @@ func transitionSelfTest() {
     precondition(FadeTransition.opacity(forOldPage: 0) == 1, "Old page opacity at 0 should be 1")
     precondition(FadeTransition.opacity(forOldPage: 1) == 0, "Old page opacity at 1 should be 0")
 
-    // Flip transition: cell-grid flip. The grid partitions into front faces
-    // (old page) and back faces (new page). At progress 0 every cell is a front
-    // face; at progress 1 every cell is a back face; mid-progress has both.
-    let cols = 50, rows = 75
-    let total = cols * rows
-    let flip0 = flipFaceCounts(0, cols: cols, rows: rows)
-    precondition(flip0.back == 0 && flip0.front == total, "Flip at progress 0 should be all front faces, got back=\(flip0.back) front=\(flip0.front)")
-    let flip1 = flipFaceCounts(1, cols: cols, rows: rows)
-    precondition(flip1.back == total && flip1.front == 0, "Flip at progress 1 should be all back faces, got back=\(flip1.back) front=\(flip1.front)")
-    let flipMid = flipFaceCounts(0.5, cols: cols, rows: rows)
-    precondition(flipMid.back > 0 && flipMid.front > 0, "Flip at progress 0.5 should have both faces, got back=\(flipMid.back) front=\(flipMid.front)")
-    precondition(flipMid.back + flipMid.front == total, "Flip faces should partition the grid, got back=\(flipMid.back) front=\(flipMid.front)")
-    // Monotonic: back grows and front shrinks as progress increases.
-    let flip25 = flipFaceCounts(0.25, cols: cols, rows: rows)
-    let flip75 = flipFaceCounts(0.75, cols: cols, rows: rows)
-    precondition(flip25.back <= flipMid.back && flipMid.back <= flip75.back, "Flip back face count should grow monotonically")
-    precondition(flip25.front >= flipMid.front && flipMid.front >= flip75.front, "Flip front face count should shrink monotonically")
+    // Flip transition (1x1 rotation): the whole screen flips on the Y axis from
+    // 0° to 180°. The front face (old page) shows below 90°, then the back face
+    // (new page) shows. flipAngle maps progress to degrees; isFrontFace marks
+    // the swap point at 90°.
+    precondition(FlipTransition.flipAngle(progress: 0) == 0, "Flip angle at progress 0 should be 0°")
+    precondition(FlipTransition.flipAngle(progress: 1) == 180, "Flip angle at progress 1 should be 180°")
+    precondition(FlipTransition.flipAngle(progress: 0.5) == 90, "Flip angle at progress 0.5 should be 90°")
+    precondition(FlipTransition.flipAngle(progress: 1.5) == 180, "Flip angle should clamp above 1")
+    precondition(FlipTransition.flipAngle(progress: -0.5) == 0, "Flip angle should clamp below 0")
+    precondition(FlipTransition.isFrontFace(angle: 0) == true, "0° should be front face")
+    precondition(FlipTransition.isFrontFace(angle: 89) == true, "89° should be front face")
+    precondition(FlipTransition.isFrontFace(angle: 90) == false, "90° should swap to back face")
+    precondition(FlipTransition.isFrontFace(angle: 180) == false, "180° should be back face")
+    // Only the flip transition is rotational; wave/fade stay mask-based.
+    precondition(FlipTransition(seed: 0, color: .primary, duration: 0.5).isRotational == true, "Flip transition should be rotational")
+    precondition(WaveTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Wave transition should not be rotational")
+    precondition(FadeTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Fade transition should not be rotational")
 
-    // Flip mask shape bounds at the endpoints: new mask (back faces) is empty at
-    // 0 and fills the rect at 1; old mask (front faces) is the inverse.
-    let flipNew0 = FlipMaskShape(seed: 7, animatableData: 0).path(in: rect).boundingRect
-    precondition(flipNew0.width == 0 || flipNew0.height == 0, "Flip new mask at progress 0 should be empty, got \(flipNew0)")
-    let flipNew1 = FlipMaskShape(seed: 7, animatableData: 1).path(in: rect).boundingRect
-    precondition(flipNew1.width >= rect.width && flipNew1.height >= rect.height, "Flip new mask at progress 1 should fill, got \(flipNew1)")
-    let flipOld0 = FlipMaskShape(seed: 7, animatableData: 0, inverted: true).path(in: rect).boundingRect
-    precondition(flipOld0.width >= rect.width && flipOld0.height >= rect.height, "Flip old mask at progress 0 should fill, got \(flipOld0)")
-    let flipOld1 = FlipMaskShape(seed: 7, animatableData: 1, inverted: true).path(in: rect).boundingRect
-    precondition(flipOld1.width == 0 || flipOld1.height == 0, "Flip old mask at progress 1 should be empty, got \(flipOld1)")
-
-    // Flip seam overlay: the seam must trace only the narrow diagonal band of
-    // cells at the half-flip point (cellT≈0.5), not every flipping cell. At
-    // mid-progress nearly every cell is "flipping" (0<cellT<1), so a naive
-    // 0<cellT<1 guard would draw a seam for ~100% of the grid — a full-screen
-    // striped artifact. seamAlpha must be >0 for only a small fraction.
-    let seamCols = 50, seamRows = 75
-    let seamTotal = seamCols * seamRows
-    var seamDrawn = 0
-    var seamPeak: Double = 0
-    for j in 0..<seamRows {
-        for i in 0..<seamCols {
-            let cellT = FlipMaskShape.cellProgress(0.5, i: i, j: j, cols: seamCols, rows: seamRows)
-            let a = FlipMaskShape.seamAlpha(cellT)
-            if a > 0 { seamDrawn += 1 }
-            seamPeak = max(seamPeak, a)
-        }
-    }
-    precondition(seamDrawn > 0, "Some cells should draw a seam at mid-progress")
-    precondition(Double(seamDrawn) < Double(seamTotal) * 0.20, "Seam overlay should cover <20% of grid at mid-progress, got \(seamDrawn)/\(seamTotal)")
-    precondition(seamPeak > 0, "Peak seam alpha at mid-progress should be >0")
-    // Cells far from the half-flip (cellT near 0 or 1) must draw nothing.
-    precondition(FlipMaskShape.seamAlpha(0) == 0, "Seam alpha at cellT=0 must be 0")
-    precondition(FlipMaskShape.seamAlpha(1) == 0, "Seam alpha at cellT=1 must be 0")
-    precondition(FlipMaskShape.seamAlpha(0.5) == seamPeak, "Seam alpha should peak at cellT=0.5")
-    precondition(FlipMaskShape.seamAlpha(0.3) == 0, "Seam alpha far from 0.5 must be 0")
-    precondition(FlipMaskShape.seamAlpha(0.7) == 0, "Seam alpha far from 0.5 must be 0")
-    // Seam cells must lie on a single diagonal band: their i+j values cluster.
-    var seamIJMinMax: (min: Int, max: Int) = (Int.max, Int.min)
-    for j in 0..<seamRows {
-        for i in 0..<seamCols {
-            let cellT = FlipMaskShape.cellProgress(0.5, i: i, j: j, cols: seamCols, rows: seamRows)
-            guard FlipMaskShape.seamAlpha(cellT) > 0 else { continue }
-            seamIJMinMax.0 = min(seamIJMinMax.0, i + j)
-            seamIJMinMax.1 = max(seamIJMinMax.1, i + j)
-        }
-    }
-    let seamBandDiagonals = seamIJMinMax.1 - seamIJMinMax.0 + 1
-    precondition(seamBandDiagonals <= 16, "Seam band should be a narrow diagonal (<=16 diagonals), got \(seamBandDiagonals)")
-
-    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip face partition (endpoints, mid, monotonic), flip seam band")
+    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip 1x1 rotation (angle mapping, 90° face swap, rotational flag)")
 
     // Transition style selection: default is wave, every style round-trips
     // through UserDefaults, unknown values fall back, and each style produces a
@@ -149,20 +99,4 @@ func transitionSelfTest() {
     print("PASS: transition speed default/round-trip/invalid fallback, duration mapping, makeTransition duration plumbing")
 }
 
-/// Counts front/back face cells for the flip mask at a given progress. Mirrors
-/// `FlipMaskShape.path` logic so self-tests assert cell partitioning exactly
-/// rather than measuring rendered area.
-private func flipFaceCounts(_ progress: Double, cols: Int, rows: Int) -> (front: Int, back: Int) {
-    var front = 0
-    var back = 0
-    for j in 0..<rows {
-        for i in 0..<cols {
-            if FlipMaskShape.isBackFace(progress: progress, i: i, j: j, cols: cols, rows: rows) {
-                back += 1
-            } else {
-                front += 1
-            }
-        }
-    }
-    return (front, back)
-}
+
