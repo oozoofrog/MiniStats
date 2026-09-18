@@ -297,7 +297,7 @@ struct FlipTransition: PageTransition {
             old
                 .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
                 .offset(x: -CGFloat(i) * cellW, y: -CGFloat(j) * cellH)
-                .frame(width: cellW, height: cellH)
+                .frame(width: cellW, height: cellH, alignment: .topLeading)
                 .clipped()
                 .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0),
                                   anchor: .center, perspective: 1)
@@ -305,7 +305,7 @@ struct FlipTransition: PageTransition {
             new
                 .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
                 .offset(x: -CGFloat(i) * cellW, y: -CGFloat(j) * cellH)
-                .frame(width: cellW, height: cellH)
+                .frame(width: cellW, height: cellH, alignment: .topLeading)
                 .clipped()
                 .rotation3DEffect(.degrees(angle - 180), axis: (x: 0, y: 1, z: 0),
                                   anchor: .center, perspective: 1)
