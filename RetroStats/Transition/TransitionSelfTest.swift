@@ -56,7 +56,42 @@ func transitionSelfTest() {
     precondition(WaveTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Wave transition should not be rotational")
     precondition(FadeTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Fade transition should not be rotational")
 
-    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip 1x1 rotation (angle mapping, 90° face swap, rotational flag)")
+    // Flip grid (2×2): the screen is tiled into a grid and each cell rotates on
+    // its own delayed schedule via `cellProgress`. At progress 0 every cell is
+    // at angle 0; at progress 1 every cell is at 180; mid-progress cells differ
+    // because the diagonal delay makes (0,0) lead and the far corner trail.
+    // `cellProgress` is the per-cell 0…1 that `flipAngle` maps to degrees.
+    precondition(FlipTransition.cellProgress(0, i: 0, j: 0, cols: 2, rows: 2) == 0, "cellProgress at 0 should be 0")
+    precondition(FlipTransition.cellProgress(1, i: 1, j: 1, cols: 2, rows: 2) == 1, "cellProgress at 1 should be 1")
+    // Leading corner (0,0) always reaches a given milestone first; trailing
+    // corner (cols-1,rows-1) is most delayed but not necessarily at 0.
+    let leadMid = FlipTransition.cellProgress(0.5, i: 0, j: 0, cols: 2, rows: 2)
+    let trailMid = FlipTransition.cellProgress(0.5, i: 1, j: 1, cols: 2, rows: 2)
+    precondition(leadMid > trailMid, "Leading corner should be ahead at mid-progress, got lead=\(leadMid) trail=\(trailMid)")
+    precondition(leadMid == 1, "Leading corner should be fully flipped at 0.5, got \(leadMid)")
+    precondition(trailMid > 0 && trailMid < 1, "Trailing corner should be mid-flip (not 0, not 1) at 0.5, got \(trailMid)")
+    // Early in the transition the trailing corner hasn't started yet.
+    let trailEarly = FlipTransition.cellProgress(0.2, i: 1, j: 1, cols: 2, rows: 2)
+    precondition(trailEarly == 0, "Trailing corner should not have started early, got \(trailEarly)")
+    // Monotonic per cell as progress grows.
+    for (i, j) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+        let p0 = FlipTransition.cellProgress(0.25, i: i, j: j, cols: 2, rows: 2)
+        let p1 = FlipTransition.cellProgress(0.5, i: i, j: j, cols: 2, rows: 2)
+        let p2 = FlipTransition.cellProgress(0.75, i: i, j: j, cols: 2, rows: 2)
+        precondition(p0 <= p1 && p1 <= p2, "cellProgress should be monotonic for cell (\(i),\(j))")
+    }
+    // 2×2 grid: 4 cells, each producing an angle from its cellProgress.
+    let grid = [(0,0),(1,0),(0,1),(1,1)]
+    let angles0 = grid.map { FlipTransition.flipAngle(progress: FlipTransition.cellProgress(0, i: $0.0, j: $0.1, cols: 2, rows: 2)) }
+    precondition(angles0.allSatisfy { $0 == 0 }, "All cells at 0° at progress 0")
+    let angles1 = grid.map { FlipTransition.flipAngle(progress: FlipTransition.cellProgress(1, i: $0.0, j: $0.1, cols: 2, rows: 2)) }
+    precondition(angles1.allSatisfy { $0 == 180 }, "All cells at 180° at progress 1")
+    let distinctAngles = Set(grid.map { FlipTransition.flipAngle(progress: FlipTransition.cellProgress(0.5, i: $0.0, j: $0.1, cols: 2, rows: 2)) })
+    precondition(distinctAngles.count > 1, "Cells should be at different angles mid-progress, got \(distinctAngles)")
+    // 2×2 partition: `gridSize` divides the screen evenly into 2 columns/rows.
+    precondition(FlipTransition.gridSize == 2, "Flip grid size should be 2 at this stage")
+
+    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip rotation (1×1 angle/face swap, 2×2 cellProgress diagonal delay, grid angles)")
 
     // Transition style selection: default is wave, every style round-trips
     // through UserDefaults, unknown values fall back, and each style produces a

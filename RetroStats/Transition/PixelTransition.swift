@@ -227,6 +227,11 @@ struct FlipTransition: PageTransition {
 
     var isRotational: Bool { true }
 
+    /// Grid divisions per axis. Stage 2×2: the screen is split into 2 columns
+    /// and 2 rows (4 cells), each rotating on its own delayed schedule. Will
+    /// grow (4×4, 8×8, …) in later stages.
+    static let gridSize: Int = 2
+
     /// Maps transition progress (0…1) to a Y-axis rotation angle in degrees
     /// (0°…180°). Clamped so out-of-range progress can't overshoot.
     static func flipAngle(progress: Double) -> Double {
@@ -239,6 +244,18 @@ struct FlipTransition: PageTransition {
         angle < 90
     }
 
+    /// Per-cell progress (0…1) for cell (i, j) in a `cols`×`rows` grid. A
+    /// diagonal delay spreads the flip so the half-flip point sweeps from the
+    /// leading corner (0,0) to the trailing corner, instead of all cells
+    /// flipping at once. `band` controls how wide the sweep window is.
+    static func cellProgress(_ progress: Double, i: Int, j: Int, cols: Int, rows: Int) -> Double {
+        let t = max(0, min(1, progress))
+        let denom = max(1, cols + rows - 1)
+        let delay = Double(i + j) / Double(denom)
+        let band: Double = 1.0
+        return max(0, min(1, t * (1 + band) - delay * band))
+    }
+
     /// Mask members are unused because `isRotational` is `true`; `TransitionContainer`
     /// calls `rotationBody` instead. Kept as no-ops to satisfy the protocol.
     func newPageMask(progress: Double) -> AnyView { AnyView(EmptyView()) }
@@ -246,20 +263,54 @@ struct FlipTransition: PageTransition {
     func overlay(progress: Double, start: Date?) -> AnyView { AnyView(EmptyView()) }
 
     func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView {
-        let angle = Self.flipAngle(progress: progress)
-        let front = Self.isFrontFace(angle: angle)
+        let n = Self.gridSize
         return AnyView(
-            ZStack {
-                old
-                    .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0),
-                                      anchor: .center, perspective: 1)
-                    .opacity(front ? 1 : 0)
-                new
-                    .rotation3DEffect(.degrees(angle - 180), axis: (x: 0, y: 1, z: 0),
-                                      anchor: .center, perspective: 1)
-                    .opacity(front ? 0 : 1)
+            GeometryReader { geo in
+                let size = geo.size
+                let cellW = size.width / CGFloat(n)
+                let cellH = size.height / CGFloat(n)
+                ZStack(alignment: .topLeading) {
+                    ForEach(0..<(n * n), id: \.self) { idx in
+                        let i = idx % n
+                        let j = idx / n
+                        flipCell(old: old, new: new, i: i, j: j, n: n,
+                                 cellW: cellW, cellH: cellH, progress: progress)
+                    }
+                }
+                .frame(width: size.width, height: size.height)
             }
         )
+    }
+
+    /// One grid cell: carries the full page view (old and new), offset+clipped
+    /// to its tile, then rotated on the Y axis. The front/back face swap at
+    /// 90° reads as the tile flipping over.
+    private func flipCell(old: AnyView, new: AnyView, i: Int, j: Int, n: Int,
+                          cellW: CGFloat, cellH: CGFloat, progress: Double) -> some View {
+        let cp = Self.cellProgress(progress, i: i, j: j, cols: n, rows: n)
+        let angle = Self.flipAngle(progress: cp)
+        let front = Self.isFrontFace(angle: angle)
+        let cellSize = CGSize(width: cellW, height: cellH)
+        return ZStack {
+            old
+                .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
+                .offset(x: -CGFloat(i) * cellW, y: -CGFloat(j) * cellH)
+                .frame(width: cellW, height: cellH)
+                .clipped()
+                .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0),
+                                  anchor: .center, perspective: 1)
+                .opacity(front ? 1 : 0)
+            new
+                .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
+                .offset(x: -CGFloat(i) * cellW, y: -CGFloat(j) * cellH)
+                .frame(width: cellW, height: cellH)
+                .clipped()
+                .rotation3DEffect(.degrees(angle - 180), axis: (x: 0, y: 1, z: 0),
+                                  anchor: .center, perspective: 1)
+                .opacity(front ? 0 : 1)
+        }
+        .frame(width: cellW, height: cellH)
+        .offset(x: CGFloat(i) * cellW, y: CGFloat(j) * cellH)
     }
 }
 
