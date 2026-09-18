@@ -123,9 +123,12 @@ struct PixelWaveMaskShape: Shape {
 /// user settings without a separate generic `TransitionContainer` per style.
 ///
 /// A style may instead opt into rotational rendering via `isRotational`: the
-/// container then calls `rotationBody(old:new:progress:)` with the actual page
-/// views so the transition can rotate real content (e.g. a 3D card flip) rather
-/// than mask it. Mask-based styles leave `isRotational` at its default `false`.
+/// container then calls `rotationBody(old:new:progress:start:)` with the actual
+/// page views so the transition can rotate real content (e.g. a 3D card flip)
+/// rather than mask it. The `start` timestamp lets a rotational style drive
+/// per-frame progress from a `TimelineView`, since a plain `progress` value is
+/// captured once and won't animate on its own. Mask-based styles leave
+/// `isRotational` at its default `false`.
 protocol PageTransition {
     var seed: Int { get }
     var color: Color { get }
@@ -135,7 +138,7 @@ protocol PageTransition {
     func newPageMask(progress: Double) -> AnyView
     func oldPageMask(progress: Double) -> AnyView
     func overlay(progress: Double, start: Date?) -> AnyView
-    func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView
+    func rotationBody(old: AnyView, new: AnyView, progress: Double, start: Date?) -> AnyView
 }
 
 extension PageTransition {
@@ -144,7 +147,7 @@ extension PageTransition {
     var isRotational: Bool { false }
 
     /// Default no-op; only rotational styles implement this.
-    func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView {
+    func rotationBody(old: AnyView, new: AnyView, progress: Double, start: Date?) -> AnyView {
         AnyView(EmptyView())
     }
 }
@@ -284,24 +287,29 @@ struct FlipTransition: PageTransition {
     func oldPageMask(progress: Double) -> AnyView { AnyView(EmptyView()) }
     func overlay(progress: Double, start: Date?) -> AnyView { AnyView(EmptyView()) }
 
-    func rotationBody(old: AnyView, new: AnyView, progress: Double) -> AnyView {
+    func rotationBody(old: AnyView, new: AnyView, progress: Double, start: Date?) -> AnyView {
         let n = Self.gridSize
+        let duration = self.duration
         return AnyView(
-            GeometryReader { geo in
-                let size = geo.size
-                let cellW = size.width / CGFloat(n)
-                let cellH = size.height / CGFloat(n)
-                VStack(spacing: 0) {
-                    ForEach(0..<n, id: \.self) { j in
-                        HStack(spacing: 0) {
-                            ForEach(0..<n, id: \.self) { i in
-                                flipCell(old: old, new: new, i: i, j: j, n: n,
-                                         cellW: cellW, cellH: cellH, progress: progress)
+            TimelineView(.animation) { context in
+                let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / duration)) }
+                    ?? max(0, min(1, progress))
+                GeometryReader { geo in
+                    let size = geo.size
+                    let cellW = size.width / CGFloat(n)
+                    let cellH = size.height / CGFloat(n)
+                    VStack(spacing: 0) {
+                        ForEach(0..<n, id: \.self) { j in
+                            HStack(spacing: 0) {
+                                ForEach(0..<n, id: \.self) { i in
+                                    flipCell(old: old, new: new, i: i, j: j, n: n,
+                                             cellW: cellW, cellH: cellH, progress: p)
+                                }
                             }
                         }
                     }
+                    .frame(width: size.width, height: size.height)
                 }
-                .frame(width: size.width, height: size.height)
             }
         )
     }

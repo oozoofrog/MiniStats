@@ -28,7 +28,8 @@ struct TransitionContainer<Content: View>: View {
                     transition.rotationBody(
                         old: AnyView(content(previousPage!)),
                         new: AnyView(content(currentPage)),
-                        progress: progress
+                        progress: progress,
+                        start: transitionStart
                     )
                 } else {
                     content(previousPage!)
