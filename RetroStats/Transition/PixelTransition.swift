@@ -269,12 +269,14 @@ struct FlipTransition: PageTransition {
                 let size = geo.size
                 let cellW = size.width / CGFloat(n)
                 let cellH = size.height / CGFloat(n)
-                ZStack(alignment: .topLeading) {
-                    ForEach(0..<(n * n), id: \.self) { idx in
-                        let i = idx % n
-                        let j = idx / n
-                        flipCell(old: old, new: new, i: i, j: j, n: n,
-                                 cellW: cellW, cellH: cellH, progress: progress)
+                VStack(spacing: 0) {
+                    ForEach(0..<n, id: \.self) { j in
+                        HStack(spacing: 0) {
+                            ForEach(0..<n, id: \.self) { i in
+                                flipCell(old: old, new: new, i: i, j: j, n: n,
+                                         cellW: cellW, cellH: cellH, progress: progress)
+                            }
+                        }
                     }
                 }
                 .frame(width: size.width, height: size.height)
@@ -284,13 +286,13 @@ struct FlipTransition: PageTransition {
 
     /// One grid cell: carries the full page view (old and new), offset+clipped
     /// to its tile, then rotated on the Y axis. The front/back face swap at
-    /// 90° reads as the tile flipping over.
+    /// 90° reads as the tile flipping over. The cell is laid out at its tile
+    /// position by the enclosing HStack/VStack (not offset), so tiling is even.
     private func flipCell(old: AnyView, new: AnyView, i: Int, j: Int, n: Int,
                           cellW: CGFloat, cellH: CGFloat, progress: Double) -> some View {
         let cp = Self.cellProgress(progress, i: i, j: j, cols: n, rows: n)
         let angle = Self.flipAngle(progress: cp)
         let front = Self.isFrontFace(angle: angle)
-        let cellSize = CGSize(width: cellW, height: cellH)
         return ZStack {
             old
                 .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
@@ -310,7 +312,7 @@ struct FlipTransition: PageTransition {
                 .opacity(front ? 0 : 1)
         }
         .frame(width: cellW, height: cellH)
-        .offset(x: CGFloat(i) * cellW, y: CGFloat(j) * cellH)
+        .clipped()
     }
 }
 
