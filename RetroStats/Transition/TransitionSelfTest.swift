@@ -38,29 +38,40 @@ func transitionSelfTest() {
     precondition(FadeTransition.opacity(forOldPage: 0) == 1, "Old page opacity at 0 should be 1")
     precondition(FadeTransition.opacity(forOldPage: 1) == 0, "Old page opacity at 1 should be 0")
 
-    // Flip transition (1x1 rotation): the whole screen flips on the Y axis from
-    // 0° to 180°. The front face (old page) shows below 90°, then the back face
-    // (new page) shows. flipAngle maps progress to degrees; isFrontFace marks
-    // the swap point at 90°.
+    // Flip clock: each cell splits into top and bottom halves that fold on
+    // the X axis around the cell's horizontal midline. The top half's axis is
+    // its bottom edge; it folds down (0→90°). The bottom half's axis is its top
+    // edge; it folds up (0→90°). On each half the old front folds away to 90°,
+    // then the new back unfolds from 90° to 0° — the swap happens at 90°.
     precondition(FlipTransition.flipAngle(progress: 0) == 0, "Flip angle at progress 0 should be 0°")
-    precondition(FlipTransition.flipAngle(progress: 1) == 180, "Flip angle at progress 1 should be 180°")
-    precondition(FlipTransition.flipAngle(progress: 0.5) == 90, "Flip angle at progress 0.5 should be 90°")
-    precondition(FlipTransition.flipAngle(progress: 1.5) == 180, "Flip angle should clamp above 1")
+    precondition(FlipTransition.flipAngle(progress: 1) == 90, "Flip angle at progress 1 should be 90° (half-fold)")
+    precondition(FlipTransition.flipAngle(progress: 0.5) == 45, "Flip angle at progress 0.5 should be 45°")
+    precondition(FlipTransition.flipAngle(progress: 1.5) == 90, "Flip angle should clamp above 1")
     precondition(FlipTransition.flipAngle(progress: -0.5) == 0, "Flip angle should clamp below 0")
-    precondition(FlipTransition.isFrontFace(angle: 0) == true, "0° should be front face")
+    precondition(FlipTransition.isFrontFace(angle: 0) == true, "0° should be front face (old)")
     precondition(FlipTransition.isFrontFace(angle: 89) == true, "89° should be front face")
-    precondition(FlipTransition.isFrontFace(angle: 90) == false, "90° should swap to back face")
-    precondition(FlipTransition.isFrontFace(angle: 180) == false, "180° should be back face")
+    precondition(FlipTransition.isFrontFace(angle: 90) == false, "90° should swap to back face (new)")
+    // Top half rotates around its bottom edge (.bottom); bottom half around its
+    // top edge (.top). The two anchors meet at the cell midline.
+    precondition(FlipTransition.halfAnchor(isTop: true) == .bottom, "Top half axis should be .bottom")
+    precondition(FlipTransition.halfAnchor(isTop: false) == .top, "Bottom half axis should be .top")
+    // Old front folds forward (positive angle toward 90°); new back starts
+    // folded and unfolds back to 0°. The two angles are complementary around 90°.
+    precondition(FlipTransition.oldHalfAngle(progress: 0) == 0, "Old half angle at 0 should be 0°")
+    precondition(FlipTransition.oldHalfAngle(progress: 1) == 90, "Old half angle at 1 should be 90° (folded away)")
+    precondition(FlipTransition.newHalfAngle(progress: 0) == 90, "New half angle at 0 should be 90° (still folded)")
+    precondition(FlipTransition.newHalfAngle(progress: 1) == 0, "New half angle at 1 should be 0° (unfolded)")
+    precondition(FlipTransition.oldHalfAngle(progress: 0.5) + FlipTransition.newHalfAngle(progress: 0.5) == 90, "Old+new half angles should sum to 90°")
     // Only the flip transition is rotational; wave/fade stay mask-based.
     precondition(FlipTransition(seed: 0, color: .primary, duration: 0.5).isRotational == true, "Flip transition should be rotational")
     precondition(WaveTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Wave transition should not be rotational")
     precondition(FadeTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Fade transition should not be rotational")
 
-    // Flip grid (2×2): the screen is tiled into a grid and each cell rotates on
-    // its own delayed schedule via `cellProgress`. At progress 0 every cell is
-    // at angle 0; at progress 1 every cell is at 180; mid-progress cells differ
-    // because the diagonal delay makes (0,0) lead and the far corner trail.
-    // `cellProgress` is the per-cell 0…1 that `flipAngle` maps to degrees.
+    // Flip grid (2×2): the screen is tiled into a grid and each cell's halves
+    // rotate on their own delayed schedule via `cellProgress`. At progress 0
+    // every cell is at angle 0; at progress 1 every cell is at 90; mid-progress
+    // cells differ because the diagonal delay makes (0,0) lead and the far
+    // corner trail.
     precondition(FlipTransition.cellProgress(0, i: 0, j: 0, cols: 2, rows: 2) == 0, "cellProgress at 0 should be 0")
     precondition(FlipTransition.cellProgress(1, i: 1, j: 1, cols: 2, rows: 2) == 1, "cellProgress at 1 should be 1")
     // Leading corner (0,0) always reaches a given milestone first; trailing
@@ -85,13 +96,13 @@ func transitionSelfTest() {
     let angles0 = grid.map { FlipTransition.flipAngle(progress: FlipTransition.cellProgress(0, i: $0.0, j: $0.1, cols: 2, rows: 2)) }
     precondition(angles0.allSatisfy { $0 == 0 }, "All cells at 0° at progress 0")
     let angles1 = grid.map { FlipTransition.flipAngle(progress: FlipTransition.cellProgress(1, i: $0.0, j: $0.1, cols: 2, rows: 2)) }
-    precondition(angles1.allSatisfy { $0 == 180 }, "All cells at 180° at progress 1")
+    precondition(angles1.allSatisfy { $0 == 90 }, "All cells at 90° at progress 1")
     let distinctAngles = Set(grid.map { FlipTransition.flipAngle(progress: FlipTransition.cellProgress(0.5, i: $0.0, j: $0.1, cols: 2, rows: 2)) })
     precondition(distinctAngles.count > 1, "Cells should be at different angles mid-progress, got \(distinctAngles)")
     // 2×2 partition: `gridSize` divides the screen evenly into 2 columns/rows.
     precondition(FlipTransition.gridSize == 2, "Flip grid size should be 2 at this stage")
 
-    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip rotation (1×1 angle/face swap, 2×2 cellProgress diagonal delay, grid angles)")
+    print("PASS: wave mask regions (new/old at progress 0 and 1), fade opacity (new/old at progress 0 and 1), flip clock (half-fold angle/face swap/anchors, 2×2 cellProgress diagonal delay, grid angles)")
 
     // Transition style selection: default is wave, every style round-trips
     // through UserDefaults, unknown values fall back, and each style produces a

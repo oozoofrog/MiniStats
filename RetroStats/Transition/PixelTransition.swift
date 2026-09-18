@@ -232,16 +232,38 @@ struct FlipTransition: PageTransition {
     /// grow (4×4, 8×8, …) in later stages.
     static let gridSize: Int = 2
 
-    /// Maps transition progress (0…1) to a Y-axis rotation angle in degrees
-    /// (0°…180°). Clamped so out-of-range progress can't overshoot.
+    /// Maps transition progress (0…1) to a half-fold angle in degrees
+    /// (0°…90°). Each half of a cell folds through this range: the old front
+    /// folds from 0° to 90° (away), the new back unfolds from 90° to 0°. Clamped
+    /// so out-of-range progress can't overshoot.
     static func flipAngle(progress: Double) -> Double {
-        max(0, min(1, progress)) * 180
+        max(0, min(1, progress)) * 90
     }
 
     /// Whether the front face (old page) is the visible side at `angle`. The
-    /// swap to the back face (new page) happens at 90°.
+    /// swap to the back face (new page) happens at 90° (fully folded).
     static func isFrontFace(angle: Double) -> Bool {
         angle < 90
+    }
+
+    /// Rotation anchor for a half of a cell. The top half folds around its
+    /// bottom edge (the cell midline); the bottom half around its top edge
+    /// (also the midline). The two anchors meet at the midline.
+    static func halfAnchor(isTop: Bool) -> UnitPoint {
+        isTop ? .bottom : .top
+    }
+
+    /// Old front-face angle for a half at `progress`: folds from 0° (flat) to
+    /// 90° (folded away). Drives the old page rotating out of view.
+    static func oldHalfAngle(progress: Double) -> Double {
+        flipAngle(progress: progress)
+    }
+
+    /// New back-face angle for a half at `progress`: starts folded at 90° and
+    /// unfolds to 0°. Drives the new page rotating into view. Complementary to
+    /// `oldHalfAngle` (sum to 90° at every progress).
+    static func newHalfAngle(progress: Double) -> Double {
+        90 - flipAngle(progress: progress)
     }
 
     /// Per-cell progress (0…1) for cell (i, j) in a `cols`×`rows` grid. A
@@ -284,35 +306,59 @@ struct FlipTransition: PageTransition {
         )
     }
 
-    /// One grid cell: carries the full page view (old and new), offset+clipped
-    /// to its tile, then rotated on the Y axis. The front/back face swap at
-    /// 90° reads as the tile flipping over. The cell is laid out at its tile
-    /// position by the enclosing HStack/VStack (not offset), so tiling is even.
+    /// One grid cell split into top and bottom halves. Each half carries the
+    /// full page view (old and new) offset+clipped to that half's region, then
+    /// folds on the X axis around the cell midline. The top half's axis is its
+    /// bottom edge; the bottom half's axis is its top edge. The old front folds
+    /// away (0→90°) and the new back unfolds (90→0°), swapping at 90°. Reads as
+    /// a flip-clock card. The cell is laid out at its tile position by the
+    /// enclosing HStack/VStack, so tiling is even.
     private func flipCell(old: AnyView, new: AnyView, i: Int, j: Int, n: Int,
                           cellW: CGFloat, cellH: CGFloat, progress: Double) -> some View {
         let cp = Self.cellProgress(progress, i: i, j: j, cols: n, rows: n)
-        let angle = Self.flipAngle(progress: cp)
-        let front = Self.isFrontFace(angle: angle)
+        let oldAngle = Self.oldHalfAngle(progress: cp)
+        let newAngle = Self.newHalfAngle(progress: cp)
+        let front = Self.isFrontFace(angle: oldAngle)
+        let halfH = cellH / 2
         return ZStack {
-            old
-                .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
-                .offset(x: -CGFloat(i) * cellW, y: -CGFloat(j) * cellH)
-                .frame(width: cellW, height: cellH, alignment: .topLeading)
-                .clipped()
-                .rotation3DEffect(.degrees(angle), axis: (x: 0, y: 1, z: 0),
-                                  anchor: .center, perspective: 1)
-                .opacity(front ? 1 : 0)
-            new
-                .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
-                .offset(x: -CGFloat(i) * cellW, y: -CGFloat(j) * cellH)
-                .frame(width: cellW, height: cellH, alignment: .topLeading)
-                .clipped()
-                .rotation3DEffect(.degrees(angle - 180), axis: (x: 0, y: 1, z: 0),
-                                  anchor: .center, perspective: 1)
-                .opacity(front ? 0 : 1)
+            // Top half: axis at its bottom edge (cell midline).
+            flipHalf(content: old, i: i, j: j, n: n, cellW: cellW, cellH: cellH,
+                     halfOriginY: 0, halfH: halfH,
+                     angle: oldAngle, anchor: Self.halfAnchor(isTop: true), visible: front)
+            flipHalf(content: new, i: i, j: j, n: n, cellW: cellW, cellH: cellH,
+                     halfOriginY: 0, halfH: halfH,
+                     angle: newAngle, anchor: Self.halfAnchor(isTop: true), visible: !front)
+            // Bottom half: axis at its top edge (cell midline).
+            flipHalf(content: old, i: i, j: j, n: n, cellW: cellW, cellH: cellH,
+                     halfOriginY: halfH, halfH: halfH,
+                     angle: oldAngle, anchor: Self.halfAnchor(isTop: false), visible: front)
+            flipHalf(content: new, i: i, j: j, n: n, cellW: cellW, cellH: cellH,
+                     halfOriginY: halfH, halfH: halfH,
+                     angle: newAngle, anchor: Self.halfAnchor(isTop: false), visible: !front)
         }
         .frame(width: cellW, height: cellH)
         .clipped()
+    }
+
+    /// One half of a cell. `content` is the full page view; `halfOriginY` is
+    /// the half's top edge in cell-local coordinates (0 or halfH). The page is
+    /// framed to the full cell, offset so the half's region sits at the origin,
+    /// then clipped to `cellW × halfH` and rotated on X around `anchor`.
+    private func flipHalf(content: AnyView, i: Int, j: Int, n: Int,
+                          cellW: CGFloat, cellH: CGFloat, halfOriginY: CGFloat, halfH: CGFloat,
+                          angle: Double, anchor: UnitPoint, visible: Bool) -> some View {
+        // Offset the full-page view so this half's region lands at the origin:
+        // shift left by the cell column, up by the half's top edge within the cell.
+        let pageOffsetX = -CGFloat(i) * cellW
+        let pageOffsetY = -(CGFloat(j) * cellH + halfOriginY)
+        return content
+            .frame(width: cellW * CGFloat(n), height: cellH * CGFloat(n))
+            .offset(x: pageOffsetX, y: pageOffsetY)
+            .frame(width: cellW, height: halfH, alignment: .topLeading)
+            .clipped()
+            .rotation3DEffect(.degrees(angle), axis: (x: 1, y: 0, z: 0),
+                              anchor: anchor, perspective: 1)
+            .opacity(visible ? 1 : 0)
     }
 }
 
