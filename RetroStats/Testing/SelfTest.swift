@@ -2,12 +2,28 @@ import Foundation
 import CoreText
 
 func selfTest() {
-    precondition(registerEmbeddedFonts(), "Embedded font registration failed")
-    let resolvedFont = CTFontCreateWithFontDescriptor(CTFontDescriptorCreateWithAttributes([
-        kCTFontNameAttribute: "NeoDunggeunmo-Regular",
-        kCTFontSizeAttribute: 12
-    ] as CFDictionary), 12, nil)
-    precondition(CTFontCopyPostScriptName(resolvedFont) as String == "NeoDunggeunmo-Regular", "NeoDunggeunmo did not resolve after registration")
+    precondition(RetroBitmapFont.registered, "RetroBitmapA registration failed")
+    let font = CTFontCreateWithName(RetroBitmapFont.postScriptName as CFString, 12, nil)
+    precondition(CTFontCopyPostScriptName(font) as String == RetroBitmapFont.postScriptName,
+                 "RetroBitmapA did not resolve")
+    var characters = Array("iW0%".utf16)
+    var glyphs = [CGGlyph](repeating: 0, count: characters.count)
+    precondition(CTFontGetGlyphsForCharacters(font, &characters, &glyphs, characters.count),
+                 "RetroBitmapA is missing basic glyphs")
+    var advances = [CGSize](repeating: .zero, count: glyphs.count)
+    CTFontGetAdvancesForGlyphs(font, .horizontal, glyphs, &advances, glyphs.count)
+    precondition(advances.allSatisfy { abs($0.width - advances[0].width) < 0.01 },
+                 "RetroBitmapA glyphs have unequal advances")
+    var hangul = Array("한글".utf16)
+    var hangulGlyphs = [CGGlyph](repeating: 0, count: hangul.count)
+    precondition(CTFontGetGlyphsForCharacters(font, &hangul, &hangulGlyphs, hangul.count),
+                 "RetroBitmapA is missing authored Hangul samples")
+    var hangulAdvances = [CGSize](repeating: .zero, count: hangulGlyphs.count)
+    CTFontGetAdvancesForGlyphs(font, .horizontal, hangulGlyphs, &hangulAdvances, hangulGlyphs.count)
+    precondition(abs(hangulAdvances[0].width - hangulAdvances[1].width) < 0.01,
+                 "RetroBitmapA Hangul samples have unequal advances")
+    precondition(Bundle.main.url(forResource: "default", withExtension: "metallib") != nil,
+                 "Bitmap text shader is missing from the app bundle")
     precondition(cpuLoad([0, 0, 0, 0], [20, 10, 70, 0])?.total == 30)
     precondition(cpuLoad([0, 0, 0, 0], [20, 10, 70, 0])?.system == 10)
     precondition(cpuLoad([1, 1, 1, 1], [1, 1, 1, 1]) == nil)
@@ -47,7 +63,7 @@ func selfTest() {
     guard let cpu = cpuLoad(ticks, cpuTicks()!), (0...100).contains(cpu.total) else { fatalError("Live CPU delta failed") }
     let live = topCPU(processes, processSamples(), seconds: 3)
     precondition(live.allSatisfy { $0.percent >= 0 && $0.percent <= 100 * Double(ProcessInfo.processInfo.activeProcessorCount) })
-    print("PASS: embedded font registration and resolution, CPU math/wraparound, memory bounds, network parser/rates/reset/64-bit counters, process ranking/pid reuse, sysctl reads, formatting, live sampling")
+    print("PASS: bitmap font registration/fixed width, shader bundle, CPU math/wraparound, memory bounds, network parser/rates/reset/64-bit counters, process ranking/pid reuse, sysctl reads, formatting, live sampling")
     print("CPU \(String(format: "%.1f", cpu.total))% · Memory \(bytes(memory.used))/\(bytes(totalMemory)) · \(swapText()) · \(memoryPressureText()) · \(loadAverageText()) · Interfaces \(network.keys.sorted()) · \(batteryText())")
     print("Processes \(processes.count) · top CPU \(live.map { "\($0.name) \(String(format: "%.1f", $0.percent))%" }) · top memory \(topMemory(processes).map { "\($0.name) \(bytes($0.memory))" })")
 }

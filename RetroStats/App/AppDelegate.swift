@@ -1,11 +1,24 @@
 import AppKit
 import ServiceManagement
+import SwiftUI
+
+private struct BitmapStatusText: View {
+    let value: String
+
+    var body: some View {
+        Text(value)
+            .font(.bitmap(9))
+            .multilineTextAlignment(.center)
+            .frame(width: 26)
+            .textRenderer(BitmapTextRenderer())
+    }
+}
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let dashboard = DashboardModel()
     private let popover = TransparentPopover()
     private let status = NSStatusBar.system.statusItem(withLength: 38)
-    private let readout = NSTextField(labelWithString: "—\n—")
+    private let readout = NSHostingView(rootView: BitmapStatusText(value: "—\n—"))
     private let warningIcon = NSImageView()
     private var timer: Timer?
     private var storage: StorageController?
@@ -14,10 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private var previousTime = ProcessInfo.processInfo.systemUptime
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        registerEmbeddedFonts()
         status.autosaveName = "RetroStats"
-        readout.font = .monospacedDigitSystemFont(ofSize: 9, weight: .medium)
-        readout.alignment = .center
         readout.setAccessibilityElement(false)
         warningIcon.setAccessibilityElement(false)
         if let button = status.button {
@@ -73,7 +83,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let memory = memoryUsage()
         let cpuLabel = cpu.map { String(format: "%.0f%%", $0.total) } ?? "—"
         let memoryLabel = memory.map { String(format: "%.0f%%", $0.percent) } ?? "—"
-        readout.stringValue = "\(cpuLabel)\n\(memoryLabel)"
+        readout.rootView = BitmapStatusText(value: "\(cpuLabel)\n\(memoryLabel)")
         let now = ProcessInfo.processInfo.systemUptime
         let currentNetwork = networkCounters()
         let rates = previousNetwork.flatMap { old in currentNetwork.flatMap { networkRate(old, $0, seconds: now - previousTime) } }

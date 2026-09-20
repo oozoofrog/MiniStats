@@ -96,7 +96,18 @@ private func storageModel(_ storage: StorageController) -> DashboardModel {
     return model
 }
 
+private func settingsModel() -> DashboardModel {
+    let model = DashboardModel()
+    model.page = .settings
+    model.storage = StorageController.preview()
+    return model
+}
+
 // MARK: - DerivedData cleanup screen
+
+#Preview("Settings — Bitmap Text") {
+    DashboardView(model: settingsModel())
+}
 
 #Preview("Storage Cleanup — Candidate List") {
     DashboardView(model: storageModel(.preview(report: makeReport())))

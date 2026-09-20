@@ -1,7 +1,8 @@
 build/
 .DS_Store
 RetroStats/Assets.xcassets/AppIcon.appiconset/*.png
-RetroStats/Fonts/
+RetroStats/Fonts/*
+!RetroStats/Fonts/RetroBitmapA.ttf
 *.xcuserstate
 RetroStats.xcodeproj/xcuserdata/
 RetroStats.xcodeproj/project.xcworkspace/xcuserdata/

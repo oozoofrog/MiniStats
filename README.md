@@ -33,13 +33,12 @@ macOS 26 이상에서 네이티브 Liquid Glass(`NSGlassEffectView`)를 사용�
 - 빌드: macOS 26 SDK 이상을 포함한 Xcode
 
 ```sh
-git submodule update --init --recursive
 make verify
 open build/RetroStats.app
 ```
 
 ## 라이센스
 
-메뉴바 픽셀 폰트로 [Neo둥근모](https://github.com/neodgm/neodgm)를 사용하며, 해당 폰트는 [SIL Open Font License 1.1](https://scripts.sil.org/OFL)로 배포된다. 폰트 파일과 라이센스 전문은 빌드된 앱 번들에 함께 포함된다.
+대시보드와 메뉴바 계기는 직접 그린 5×7 고정 폭 글꼴 `RetroBitmapA`를 사용한다. 영문·숫자·기본 기호와 시안의 ‘한’, ‘글’은 글꼴 안에 픽셀 패턴으로 정의했고, 그 밖의 문자와 임의의 프로세스·파일 이름은 macOS 글리프를 선명한 픽셀 격자로 표시한다. macOS 알림·메뉴·대화상자는 시스템 글꼴을 따른다.
 
 [개발 안내](docs/DEVELOPMENT.md) · [버그 제보·기능 제안](https://github.com/oozoofrog/MiniStats/issues)

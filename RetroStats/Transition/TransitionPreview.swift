@@ -42,6 +42,7 @@ struct TransitionPreview: View {
         }
         .padding(16)
         .background(Color(.windowBackgroundColor))
+        .textRenderer(BitmapTextRenderer())
         .onAppear { startTimerIfNeeded() }
         .onDisappear { timer?.invalidate() }
         .onChange(of: speed) { _, _ in startTimerIfNeeded() }
@@ -68,7 +69,7 @@ private struct PreviewSamplePage: View {
                 .ignoresSafeArea()
             VStack(spacing: 18) {
                 Text(isA ? "PAGE A" : "PAGE B")
-                    .font(.system(size: 34, weight: .heavy, design: .monospaced))
+                    .font(.bitmap(34))
                     .foregroundStyle(isA ? .black : .white)
                 ForEach(0..<4, id: \.self) { row in
                     HStack(spacing: 12) {
@@ -79,14 +80,11 @@ private struct PreviewSamplePage: View {
                         }
                     }
                 }
-                Picker("Sample mode", selection: .constant(0)) {
-                    Text("One").tag(0)
-                    Text("Two").tag(1)
-                }
-                .pickerStyle(.segmented)
+                PixelSegmentedControl(title: "Sample mode", options: [(0, "One"), (1, "Two")],
+                                      selection: .constant(0))
                 Spacer()
                 Text(isA ? "이전 화면" : "다음 화면")
-                    .font(.system(size: 13, weight: .semibold, design: .monospaced))
+                    .font(.bitmap(13))
                     .foregroundStyle(isA ? .black.opacity(0.6) : .white.opacity(0.7))
             }
             .padding(22)
@@ -103,24 +101,22 @@ private struct TransitionPreviewControls: View {
     var body: some View {
         VStack(spacing: 10) {
             HStack {
-                Text("스타일").font(.system(size: 12, weight: .semibold, design: .monospaced))
+                Text("스타일").font(.bitmap(12))
                 Spacer()
                 Text(style.label).foregroundStyle(.secondary)
             }
-            Picker("스타일", selection: $style) {
-                ForEach(TransitionStyle.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
+            PixelSegmentedControl(title: "스타일",
+                                  options: TransitionStyle.allCases.map { ($0, $0.label) },
+                                  selection: $style)
 
             HStack {
-                Text("속도").font(.system(size: 12, weight: .semibold, design: .monospaced))
+                Text("속도").font(.bitmap(12))
                 Spacer()
                 Text(speed.label).foregroundStyle(.secondary)
             }
-            Picker("속도", selection: $speed) {
-                ForEach(TransitionSpeed.allCases, id: \.self) { Text($0.label).tag($0) }
-            }
-            .pickerStyle(.segmented)
+            PixelSegmentedControl(title: "속도",
+                                  options: TransitionSpeed.allCases.map { ($0, $0.label) },
+                                  selection: $speed)
 
             HStack(spacing: 10) {
                 Button("A → B 전환") { page = (page == .overview) ? .settings : .overview }
@@ -130,7 +126,7 @@ private struct TransitionPreviewControls: View {
                 Button("B로") { page = .settings }
                     .buttonStyle(.bordered)
             }
-            .font(.system(size: 12, weight: .semibold, design: .monospaced))
+            .font(.bitmap(12))
         }
         .padding(12)
         .background(Color(.controlBackgroundColor))

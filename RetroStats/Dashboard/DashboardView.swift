@@ -18,7 +18,8 @@ struct DashboardView: View {
         ) { page in
             dashboardPanel(for: page)
         }
-        .font(.pixel(13))
+        .font(.bitmap(13))
+        .textRenderer(BitmapTextRenderer())
         .frame(width: 400, height: 600)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .onChange(of: candidatePaths) { _, newPaths in
@@ -29,15 +30,15 @@ struct DashboardView: View {
         VStack(spacing: 0) {
             HStack(spacing: 10) {
                 if page != .overview {
-                    Button { model.page = .overview } label: { Image(systemName: "chevron.left").font(.pixel(16)).frame(width: 24, height: 24) }
+                    Button { model.page = .overview } label: { Image(systemName: "chevron.left").font(.system(size: 16)).frame(width: 24, height: 24) }
                         .buttonStyle(.plain).help("Back to dashboard").accessibilityLabel("Back to dashboard")
                 } else {
                     Image(systemName: "waveform.path").foregroundStyle(ink).font(.system(size: 19, weight: .semibold))
                 }
-                Text(titleFor(page)).font(.pixel(18))
+                Text(titleFor(page)).font(.bitmap(18))
                 Spacer()
                 if page == .overview {
-                    Text("Live").font(.pixel(12)).foregroundStyle(.secondary)
+                    Text("Live").font(.bitmap(12)).foregroundStyle(.secondary)
                     PixelLED(size: 10, color: ink)
                 }
                 if page != .settings {
@@ -55,9 +56,9 @@ struct DashboardView: View {
             if page == .storage { storageActionBar.padding(.horizontal, 22).padding(.vertical, 12) }
             Divider().opacity(0.5)
             HStack {
-                Text("\(ProcessInfo.processInfo.activeProcessorCount) cores · \(bytes(totalMemory))").font(.pixel(11)).lineLimit(1)
+                Text("\(ProcessInfo.processInfo.activeProcessorCount) cores · \(bytes(totalMemory))").font(.bitmap(11)).lineLimit(1)
                 Spacer()
-                Text("Refreshes every 3 seconds").font(.pixel(11))
+                Text("Refreshes every 3 seconds").font(.bitmap(11))
             }.foregroundStyle(.secondary).padding(.horizontal, 22).padding(.vertical, 12)
         }
     }
@@ -91,12 +92,12 @@ struct DashboardView: View {
             }.fixedSize(horizontal: false, vertical: true)
             Divider().opacity(0.5)
             HStack {
-                Label("Network", systemImage: "network").font(.pixel(12))
+                Label("Network", systemImage: "network").font(.bitmap(12))
                 Spacer()
                 VStack(alignment: .trailing, spacing: 6) {
                     Text("↓  \(model.download)").foregroundStyle(ink)
                     Text("↑  \(model.upload)").foregroundStyle(.secondary)
-                }.font(.pixel(12))
+                }.font(.bitmap(12))
             }
             Button { model.page = .storage } label: {
                 VStack(alignment: .leading, spacing: 10) {
@@ -104,21 +105,21 @@ struct DashboardView: View {
                         Label("Storage", systemImage: "internaldrive")
                         Spacer()
                         Text(storage?.disk.map { String(format: "%.0f%%", $0.percent) } ?? "—")
-                        Image(systemName: "chevron.right").font(.pixel(10)).foregroundStyle(.secondary)
-                    }.font(.pixel(12))
+                        Image(systemName: "chevron.right").font(.system(size: 10)).foregroundStyle(.secondary)
+                    }.font(.bitmap(12))
                     UsageBar(percent: storage?.disk?.percent ?? 0, color: ink, warning: storage?.disk?.warning == true)
                     HStack {
                         Text(storage?.disk.map { "Free \(bytes($0.free))" } ?? "Read failed")
                         Spacer()
                         if let report = storage?.report { Text("Cleanup candidates \(bytes(UInt64(report.candidateBytes)))") }
                         else { Text(storage?.busy == true ? "Checking…" : "Review candidates") }
-                    }.font(.pixel(10)).foregroundStyle(.secondary)
+                    }.font(.bitmap(10)).foregroundStyle(.secondary)
                 }.padding(14).lcdPanel(cornerRadius: 14)
             }.buttonStyle(.plain).accessibilityRepresentation { Button("Open Storage Cleanup") { model.page = .storage } }
             HStack {
-                Text(model.battery).font(.pixel(11)).foregroundStyle(.secondary)
+                Text(model.battery).font(.bitmap(11)).foregroundStyle(.secondary)
                 Spacer()
-                Button("Activity Monitor") { openActivityMonitor() }.font(.pixel(11)).buttonStyle(.pixelGhost)
+                Button("Activity Monitor") { openActivityMonitor() }.font(.bitmap(11)).buttonStyle(.pixelGhost)
             }
         }
     }
@@ -126,32 +127,32 @@ struct DashboardView: View {
         Button { model.order = order; model.page = .processes } label: {
             VStack(alignment: .leading, spacing: 9) {
                 HStack {
-                    Text(order == .cpu ? "CPU" : "MEM").font(.pixel(12)).foregroundStyle(ink)
+                    Text(order == .cpu ? "CPU" : "MEM").font(.bitmap(12)).foregroundStyle(ink)
                     Spacer()
-                    Image(systemName: "arrow.up.right").font(.pixel(10)).foregroundStyle(.secondary)
+                    Image(systemName: "arrow.up.right").font(.system(size: 10)).foregroundStyle(.secondary)
                 }
                 LCDScreen {
                     VStack(alignment: .leading, spacing: 6) {
                         HStack(alignment: .firstTextBaseline, spacing: 2) {
-                            Text(value.map { String(format: "%.0f", $0) } ?? "—").font(.pixel(40)).foregroundStyle(.white)
-                            Text("%").font(.pixel(16)).foregroundStyle(.white.opacity(0.6))
+                            Text(value.map { String(format: "%.0f", $0) } ?? "—").font(.bitmap(40)).foregroundStyle(.white)
+                            Text("%").font(.bitmap(16)).foregroundStyle(.white.opacity(0.6))
                         }
                         HistoryLine(values: history, color: .white).frame(height: 30)
                     }
                 }
-                Text(subtitle).font(.pixel(10)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
-                Text("Top Processes").font(.pixel(10)).foregroundStyle(.secondary)
+                Text(subtitle).font(.bitmap(10)).foregroundStyle(.secondary).lineLimit(1).minimumScaleFactor(0.8)
+                Text("Top Processes").font(.bitmap(10)).foregroundStyle(.secondary)
                 let rows = Array(order.sorted(model.processes).prefix(3))
                 if rows.isEmpty {
                     Text(model.sampled && model.processes.isEmpty ? "No readable processes" : "Measuring…")
-                        .font(.pixel(10)).foregroundStyle(.secondary).frame(height: 54, alignment: .top)
+                        .font(.bitmap(10)).foregroundStyle(.secondary).frame(height: 54, alignment: .top)
                 } else {
                     ForEach(rows) { process in
                         HStack(spacing: 4) {
                             Text(process.name).lineLimit(1).truncationMode(.tail)
                             Spacer(minLength: 2)
                             Text(processValue(process, order: order)).foregroundStyle(.secondary).fixedSize()
-                        }.font(.pixel(10))
+                        }.font(.bitmap(10))
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading).contentShape(Rectangle())
@@ -159,43 +160,43 @@ struct DashboardView: View {
     }
     private var processDetails: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Picker("Sort by", selection: $model.order) {
-                ForEach(ProcessOrder.allCases) { Text($0.rawValue).tag($0) }
-            }.pickerStyle(.segmented)
+            PixelSegmentedControl(title: "Sort by",
+                                  options: ProcessOrder.allCases.map { ($0, $0.rawValue) },
+                                  selection: $model.order)
             HStack(alignment: .firstTextBaseline) {
                 Text(model.order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
-                    .font(.pixel(32))
-                Text(model.order == .cpu ? "All CPU" : "/ \(bytes(totalMemory))").font(.pixel(12)).foregroundStyle(.secondary)
+                    .font(.bitmap(32))
+                Text(model.order == .cpu ? "All CPU" : "/ \(bytes(totalMemory))").font(.bitmap(12)).foregroundStyle(.secondary)
             }
             if model.order == .cpu {
-                Text(model.cpu.map { String(format: "User %.1f%% · System %.1f%%", $0.user, $0.system) } ?? "Measuring…").font(.pixel(11)).foregroundStyle(.secondary)
-                Text(model.load).font(.pixel(10)).foregroundStyle(.secondary)
+                Text(model.cpu.map { String(format: "User %.1f%% · System %.1f%%", $0.user, $0.system) } ?? "Measuring…").font(.bitmap(11)).foregroundStyle(.secondary)
+                Text(model.load).font(.bitmap(10)).foregroundStyle(.secondary)
             } else {
                 if let memory = model.memory {
-                    Text("App \(bytes(memory.app)) · Wired \(bytes(memory.wired)) · Compressed \(bytes(memory.compressed))").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("App \(bytes(memory.app)) · Wired \(bytes(memory.wired)) · Compressed \(bytes(memory.compressed))").font(.bitmap(10)).foregroundStyle(.secondary)
                 }
-                Text(model.pressure + "\n" + model.swap).font(.pixel(11)).foregroundStyle(.secondary)
+                Text(model.pressure + "\n" + model.swap).font(.bitmap(11)).foregroundStyle(.secondary)
             }
             HStack {
-                Text("Top 5").font(.pixel(12))
+                Text("Top 5").font(.bitmap(12))
                 Spacer()
-                Text(model.order == .cpu ? "CPU %" : "Memory").font(.pixel(11)).foregroundStyle(.secondary)
+                Text(model.order == .cpu ? "CPU %" : "Memory").font(.bitmap(11)).foregroundStyle(.secondary)
             }.padding(.top, 4)
             let rows = Array(model.order.sorted(model.processes).prefix(5))
-            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "No process information is available." : "Measuring CPU usage…").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 20) }
+            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "No process information is available." : "Measuring CPU usage…").font(.bitmap(11)).foregroundStyle(.secondary).padding(.vertical, 20) }
             ForEach(rows) { process in
                 HStack(spacing: 10) {
                     Image(systemName: "app.dashed").foregroundStyle(.secondary).font(.system(size: 19)).accessibilityHidden(true)
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(process.name).font(.pixel(12)).lineLimit(1)
-                        Text("PID \(String(process.pid))").font(.pixel(10)).foregroundStyle(.secondary)
+                        Text(process.name).font(.bitmap(12)).lineLimit(1)
+                        Text("PID \(String(process.pid))").font(.bitmap(10)).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Text(processValue(process, order: model.order)).font(.pixel(12))
+                    Text(processValue(process, order: model.order)).font(.bitmap(12))
                 }.padding(.vertical, 4)
             }
             Text(model.order == .cpu ? "Only processes accessible to RetroStats are shown. Process CPU 100% represents one core; using multiple cores can exceed 100%." : "Only processes accessible to RetroStats are shown. Memory uses the same basis as the Memory column in Activity Monitor.")
-                .font(.pixel(10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                .font(.bitmap(10)).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             Button("Open Activity Monitor") { openActivityMonitor() }.buttonStyle(.pixelGhost).controlSize(.small)
         }
     }
@@ -203,18 +204,18 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 14) {
             if let disk = storage?.disk {
                 HStack(alignment: .firstTextBaseline) {
-                    Text(bytes(disk.free)).font(.pixel(30))
-                    Text("Free Space").font(.pixel(12)).foregroundStyle(.secondary)
+                    Text(bytes(disk.free)).font(.bitmap(30))
+                    Text("Free Space").font(.bitmap(12)).foregroundStyle(.secondary)
                 }
                 UsageBar(percent: disk.percent, color: ink, warning: disk.warning)
-                Text(disk.description).font(.pixel(10)).foregroundStyle(.secondary)
-                if let detail = disk.detail { Text(detail).font(.pixel(10)).foregroundStyle(.secondary) }
+                Text(disk.description).font(.bitmap(10)).foregroundStyle(.secondary)
+                if let detail = disk.detail { Text(detail).font(.bitmap(10)).foregroundStyle(.secondary) }
             }
             Divider()
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("DerivedData").font(.pixel(14))
-                    Text("Caches unused for more than 8 hours").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("DerivedData").font(.bitmap(14))
+                    Text("Caches unused for more than 8 hours").font(.bitmap(10)).foregroundStyle(.secondary)
                 }
                 Spacer()
                 if storage?.busy == true && storage?.cleaning == true { PixelHourglass(size: 14, color: ink) }
@@ -223,8 +224,8 @@ struct DashboardView: View {
             if let progress = storage?.cleanProgress {
                 cleanProgressSection(progress)
             } else {
-                if storage?.busy == true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
-                if let error = storage?.lastError { Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled) }
+                if storage?.busy == true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.bitmap(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
+                if let error = storage?.lastError { Text(error).font(.bitmap(10)).foregroundStyle(.red).textSelection(.enabled) }
                 if let report = storage?.report {
                     HStack {
                         Text("\(report.candidates.count) candidates · \(bytes(UInt64(report.candidateBytes)))")
@@ -232,14 +233,14 @@ struct DashboardView: View {
                         Button(selection.count == candidatePaths.count && !selection.isEmpty ? "Deselect All" : "Select All") {
                             selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
                         }.buttonStyle(.pixelGhost).disabled(storage?.busy == true || candidatePaths.isEmpty)
-                    }.font(.pixel(11))
-                    if report.candidates.isEmpty { Text("No old caches need cleanup right now.").font(.pixel(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
+                    }.font(.bitmap(11))
+                    if report.candidates.isEmpty { Text("No old caches need cleanup right now.").font(.bitmap(11)).foregroundStyle(.secondary).padding(.vertical, 8) }
                     ForEach(report.candidates, id: \.path) { entry in
                         HStack(spacing: 8) {
                             Toggle(isOn: Binding(get: { selection.contains(entry.path) }, set: { if $0 { selection.insert(entry.path) } else { selection.remove(entry.path) } })) {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11))
-                                    Text(bytes(UInt64(entry.size))).font(.pixel(10)).foregroundStyle(.secondary)
+                                    Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.bitmap(11))
+                                    Text(bytes(UInt64(entry.size))).font(.bitmap(10)).foregroundStyle(.secondary)
                                 }
                             }.toggleStyle(.pixelToggle).disabled(storage?.busy == true).help(entry.path)
                             Spacer(minLength: 0)
@@ -247,9 +248,9 @@ struct DashboardView: View {
                                 .buttonStyle(.plain).help("Show in Finder").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Show in Finder")
                         }.padding(.vertical, 3)
                     }
-                    Text("\(report.items.count) total caches · \(bytes(UInt64(report.totalBytes)))").font(.pixel(10)).foregroundStyle(.secondary)
+                    Text("\(report.items.count) total caches · \(bytes(UInt64(report.totalBytes)))").font(.bitmap(10)).foregroundStyle(.secondary)
                     Text("Last checked \(englishDateTime(Date(timeIntervalSince1970: report.generatedAt)))")
-                        .font(.pixel(10)).foregroundStyle(.secondary)
+                        .font(.bitmap(10)).foregroundStyle(.secondary)
                 }
             }
         }
@@ -265,40 +266,40 @@ struct DashboardView: View {
     }
     private func cleanConfirmCard(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Permanently delete \(progress.totalCount) selected items totaling \(bytes(UInt64(progress.items.reduce(Int64(0)) { $0 + $1.size })))?").font(.pixel(13))
-            Text("Each item will be rechecked against the 8-hour threshold. Items in use are kept automatically.").font(.pixel(11)).foregroundStyle(.secondary)
+            Text("Permanently delete \(progress.totalCount) selected items totaling \(bytes(UInt64(progress.items.reduce(Int64(0)) { $0 + $1.size })))?").font(.bitmap(13))
+            Text("Each item will be rechecked against the 8-hour threshold. Items in use are kept automatically.").font(.bitmap(11)).foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 4) {
                 ForEach(progress.items, id: \.path) { item in
-                    Text(URL(fileURLWithPath: item.path).lastPathComponent).font(.pixel(10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    Text(URL(fileURLWithPath: item.path).lastPathComponent).font(.bitmap(10)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
                 }
             }
-            Text("Quit Xcode and xcodebuild before cleanup, and do not start a new build while cleanup is running.").font(.pixel(10)).foregroundStyle(.secondary)
+            Text("Quit Xcode and xcodebuild before cleanup, and do not start a new build while cleanup is running.").font(.bitmap(10)).foregroundStyle(.secondary)
         }.padding(14).lcdPanel(cornerRadius: 12)
     }
     private func cleanRunningSection(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Cleanup Progress").font(.pixel(14))
+                Text("Cleanup Progress").font(.bitmap(14))
                 Spacer()
                 ProgressView().controlSize(.small)
             }
             HStack {
-                Text("\(progress.resolvedCount) / \(progress.totalCount) items").font(.pixel(13))
+                Text("\(progress.resolvedCount) / \(progress.totalCount) items").font(.bitmap(13))
                 Spacer()
-                Text("Freed \(bytes(UInt64(progress.freedBytes)))").font(.pixel(12)).foregroundStyle(.secondary)
+                Text("Freed \(bytes(UInt64(progress.freedBytes)))").font(.bitmap(12)).foregroundStyle(.secondary)
             }
             UsageBar(percent: Double(progress.resolvedCount) / Double(max(progress.totalCount, 1)) * 100, color: ink)
             if let path = progress.currentPath {
-                Text("Deleting: \(URL(fileURLWithPath: path).lastPathComponent)").font(.pixel(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                Text("Deleting: \(URL(fileURLWithPath: path).lastPathComponent)").font(.bitmap(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
             }
             VStack(alignment: .leading, spacing: 3) {
                 ForEach(progress.items, id: \.path) { item in
                     HStack(spacing: 8) {
                         cleanItemIcon(item.state)
-                        Text(URL(fileURLWithPath: item.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.pixel(11)).foregroundStyle(item.state == .pending || item.state == .kept ? .secondary : ink)
+                        Text(URL(fileURLWithPath: item.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.bitmap(11)).foregroundStyle(item.state == .pending || item.state == .kept ? .secondary : ink)
                         Spacer(minLength: 0)
-                        Text(bytes(UInt64(item.size))).font(.pixel(10)).foregroundStyle(.secondary)
-                        Text(cleanItemTag(item.state)).font(.pixel(10)).foregroundStyle(.secondary)
+                        Text(bytes(UInt64(item.size))).font(.bitmap(10)).foregroundStyle(.secondary)
+                        Text(cleanItemTag(item.state)).font(.bitmap(10)).foregroundStyle(.secondary)
                     }.padding(.vertical, 2)
                 }
             }
@@ -307,44 +308,44 @@ struct DashboardView: View {
     private func cleanResultSection(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text(progress.phase == .cancelled ? "Cleanup Cancelled" : "Cleanup Complete").font(.pixel(14))
+                Text(progress.phase == .cancelled ? "Cleanup Cancelled" : "Cleanup Complete").font(.bitmap(14))
                 Spacer()
                 Image(systemName: progress.phase == .cancelled ? "minus.circle" : "checkmark.circle").foregroundStyle(progress.phase == .cancelled ? Color.secondary : Color.green)
             }
             HStack(alignment: .firstTextBaseline) {
-                Text(bytes(UInt64(progress.freedBytes))).font(.pixel(26))
-                Text("Space Freed").font(.pixel(12)).foregroundStyle(.secondary)
+                Text(bytes(UInt64(progress.freedBytes))).font(.bitmap(26))
+                Text("Space Freed").font(.bitmap(12)).foregroundStyle(.secondary)
             }
             HStack(spacing: 16) {
-                Text("Deleted \(progress.deletedCount)").font(.pixel(11)).foregroundStyle(.secondary)
-                Text("Kept \(progress.keptCount)").font(.pixel(11)).foregroundStyle(.secondary)
-                Text("Total \(progress.totalCount)").font(.pixel(11)).foregroundStyle(.secondary)
+                Text("Deleted \(progress.deletedCount)").font(.bitmap(11)).foregroundStyle(.secondary)
+                Text("Kept \(progress.keptCount)").font(.bitmap(11)).foregroundStyle(.secondary)
+                Text("Total \(progress.totalCount)").font(.bitmap(11)).foregroundStyle(.secondary)
             }
             if progress.phase == .cancelled {
-                Text("Cleanup was stopped. Only items processed before cancellation were applied.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Cleanup was stopped. Only items processed before cancellation were applied.").font(.bitmap(10)).foregroundStyle(.secondary)
             }
         }
     }
     private func cleanFailedSection(_ progress: CleanProgress) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack {
-                Text("Cleanup Failed").font(.pixel(14))
+                Text("Cleanup Failed").font(.bitmap(14))
                 Spacer()
                 Image(systemName: "exclamationmark.triangle").foregroundStyle(.red)
             }
             if let error = progress.error {
-                Text(error).font(.pixel(10)).foregroundStyle(.red).textSelection(.enabled)
+                Text(error).font(.bitmap(10)).foregroundStyle(.red).textSelection(.enabled)
             }
         }
     }
     @ViewBuilder
     private func cleanItemIcon(_ state: CleanProgress.ItemState) -> some View {
         switch state {
-        case .deleted: Image(systemName: "checkmark").foregroundStyle(.green).font(.pixel(11))
+        case .deleted: Image(systemName: "checkmark").foregroundStyle(.green).font(.system(size: 11))
         case .deleting: ProgressView().controlSize(.mini)
-        case .kept: Image(systemName: "minus").foregroundStyle(.secondary).font(.pixel(11))
-        case .failed: Image(systemName: "xmark").foregroundStyle(.red).font(.pixel(11))
-        case .pending: Image(systemName: "circle").foregroundStyle(.secondary).font(.pixel(11))
+        case .kept: Image(systemName: "minus").foregroundStyle(.secondary).font(.system(size: 11))
+        case .failed: Image(systemName: "xmark").foregroundStyle(.red).font(.system(size: 11))
+        case .pending: Image(systemName: "circle").foregroundStyle(.secondary).font(.system(size: 11))
         }
     }
     private func cleanItemTag(_ state: CleanProgress.ItemState) -> String {
@@ -365,23 +366,23 @@ struct DashboardView: View {
                 Button { storage?.cancelClean() } label: {
                     Text("Cancel").frame(maxWidth: .infinity)
                 }
-                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.bitmap(10)).foregroundStyle(.secondary)
             } else if storage?.cleanProgress?.phase == .running {
                 Button { storage?.cancelClean() } label: {
                     Text("Cancel Cleanup").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary)
-                Text("Do not start a new build while cleanup is running. Cancelling only applies items processed so far.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Do not start a new build while cleanup is running. Cancelling only applies items processed so far.").font(.bitmap(10)).foregroundStyle(.secondary)
             } else if let phase = storage?.cleanProgress?.phase, phase == .done || phase == .cancelled || phase == .failed {
                 Button { storage?.dismissCleanProgress(); storage?.refresh() } label: {
                     Text("Check Again").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary)
             } else {
                 Toggle("Include Shared Caches", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
-                    .toggleStyle(.pixelToggle).font(.pixel(11)).disabled(storage?.busy == true)
+                    .toggleStyle(.pixelToggle).font(.bitmap(11)).disabled(storage?.busy == true)
                 Button { storage?.beginClean(paths: Set(selectedEntries.map(\.path))) } label: {
                     Text("Clean \(selectedEntries.count) selected · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
                 }.buttonStyle(.pixelPrimary).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
-                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.pixel(10)).foregroundStyle(.secondary)
+                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.bitmap(10)).foregroundStyle(.secondary)
             }
         }
         .buttonStyle(.pixel)
@@ -393,23 +394,23 @@ struct DashboardView: View {
             if model.loginApproval { Button("Approve automatic launch in System Settings") { SMAppService.openSystemSettingsLoginItems() }.buttonStyle(.pixel) }
             Divider()
             VStack(alignment: .leading, spacing: 8) {
-                Text("Page Transition").font(.pixel(12))
-                Picker("Page Transition", selection: $model.transitionStyle) {
-                    ForEach(TransitionStyle.allCases, id: \.self) { Text($0.label).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden()
+                Text("Page Transition").font(.bitmap(12))
+                PixelSegmentedControl(title: "Page Transition",
+                                      options: TransitionStyle.allCases.map { ($0, $0.label) },
+                                      selection: $model.transitionStyle)
             }
             VStack(alignment: .leading, spacing: 8) {
-                Text("Transition Speed").font(.pixel(12))
-                Picker("Transition Speed", selection: $model.transitionSpeed) {
-                    ForEach(TransitionSpeed.allCases, id: \.self) { Text($0.label).tag($0) }
-                }.pickerStyle(.segmented).labelsHidden()
+                Text("Transition Speed").font(.bitmap(12))
+                PixelSegmentedControl(title: "Transition Speed",
+                                      options: TransitionSpeed.allCases.map { ($0, $0.label) },
+                                      selection: $model.transitionSpeed)
             }
             Divider()
             Button("Configure Storage Alerts…") { storage?.openNotificationSettings() }
             Button("Open DerivedData Folder") { storage?.openFolder() }
             Button("Open Activity Monitor") { openActivityMonitor() }
-            Text("Disk is checked every minute; cache size is checked every hour. Cleanup only runs when you start it.").font(.pixel(11)).foregroundStyle(.secondary)
-            Text("The appearance follows macOS Light/Dark Mode and accessibility settings.").font(.pixel(11)).foregroundStyle(.secondary)
+            Text("Disk is checked every minute; cache size is checked every hour. Cleanup only runs when you start it.").font(.bitmap(11)).foregroundStyle(.secondary)
+            Text("The appearance follows macOS Light/Dark Mode and accessibility settings.").font(.bitmap(11)).foregroundStyle(.secondary)
             Divider()
             Button("Quit RetroStats") { model.quit?() }.disabled(storage?.cleaning == true)
         }.buttonStyle(.pixelGhost)

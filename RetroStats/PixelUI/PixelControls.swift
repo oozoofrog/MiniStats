@@ -2,7 +2,7 @@ import SwiftUI
 
 // MARK: - Pixel Button
 
-/// Retro bitmap button: 2px border, pixel font, pressed state fills with a 2x2
+/// Retro bitmap button: 2px border, bitmap-rendered label, pressed state fills with a 2x2
 /// dither and nudges the label down-right. Variants match the LCD design tokens.
 struct PixelButtonStyle: ButtonStyle {
     enum Variant { case `default`, primary, ghost }
@@ -94,6 +94,43 @@ struct PixelToggleStyle: ToggleStyle {
 
 extension ToggleStyle where Self == PixelToggleStyle {
     static var pixelToggle: PixelToggleStyle { .init() }
+}
+
+// MARK: - Pixel Segmented Control
+
+/// Buttons keep their Text views intact; a native segmented Picker converts its
+/// labels to AppKit strings before the bitmap text renderer can draw them.
+struct PixelSegmentedControl<Value: Hashable>: View {
+    let title: String
+    let options: [(value: Value, label: String)]
+    @Binding var selection: Value
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                let selected = selection == option.value
+                Button { selection = option.value } label: {
+                    Text(option.label)
+                        .font(.bitmap(11))
+                        .textRenderer(BitmapTextRenderer())
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 5)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .accessibilityAddTraits(selected ? [.isSelected] : [])
+            }
+        }
+        .padding(2)
+        .background(Color(.controlBackgroundColor),
+                    in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(title)
+    }
 }
 
 // MARK: - Bitmap marks

@@ -18,7 +18,7 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 printf 'Cloning RetroStats into %s\n' "$WORKDIR"
-git clone --recurse-submodules --depth 1 "$REPO" "$WORKDIR/RetroStats"
+git clone --depth 1 "$REPO" "$WORKDIR/RetroStats"
 
 printf 'Building and running self-tests (log: %s)\n' "$LOG_FILE"
 if ! ( cd "$WORKDIR/RetroStats" && make verify ) >"$LOG_FILE" 2>&1; then

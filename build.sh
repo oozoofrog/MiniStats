@@ -15,16 +15,6 @@ for size in 16 32 128 256 512; do
     sips -z "$double" "$double" assets/AppIcon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
 
-FONT_SRC=assets/Fonts/neodgm-webfont/neodgm/neodgm.woff
-FONT_LICENSE=assets/Fonts/neodgm-webfont/LICENSE.txt
-if [ ! -f "$FONT_SRC" ]; then
-    printf 'Font not found: %s\nRun: git submodule update --init --recursive\n' "$FONT_SRC" >&2
-    exit 1
-fi
-mkdir -p RetroStats/Fonts
-cp "$FONT_SRC" RetroStats/Fonts/NeoDunggeunmo.woff
-cp "$FONT_LICENSE" RetroStats/Fonts/LICENSE.txt
-
 mkdir -p "$OUTPUT"
 xcodebuild -project RetroStats.xcodeproj -scheme RetroStats -configuration "$CONFIG" \
     -destination 'platform=macOS,arch=arm64' \
@@ -33,9 +23,14 @@ xcodebuild -project RetroStats.xcodeproj -scheme RetroStats -configuration "$CON
     build
 
 APP="$OUTPUT/RetroStats.app"
-mkdir -p "$APP/Contents/Resources/Fonts"
-mv "$APP/Contents/Resources/NeoDunggeunmo.woff" "$APP/Contents/Resources/Fonts/" 2>/dev/null || true
-mv "$APP/Contents/Resources/LICENSE.txt" "$APP/Contents/Resources/Fonts/" 2>/dev/null || true
+# File-system synchronized Metal sources do not reliably invalidate Xcode's
+# incremental metallib output, so always compile the current shader here.
+METAL_AIR=$(mktemp "$OUTPUT/BitmapText.XXXXXX")
+trap 'rm -f "$METAL_AIR"' EXIT
+xcrun -sdk macosx metal -c RetroStats/PixelUI/BitmapText.metal -o "$METAL_AIR"
+xcrun -sdk macosx metallib "$METAL_AIR" -o "$APP/Contents/Resources/default.metallib"
+rm -f "$APP/Contents/Resources/Fonts/NeoDunggeunmo.woff" "$APP/Contents/Resources/Fonts/LICENSE.txt"
+rmdir "$APP/Contents/Resources/Fonts" 2>/dev/null || true
 codesign --force --sign - "$APP"
 "$APP/Contents/MacOS/RetroStats" --self-test
 printf 'Built: %s\n' "$APP"

@@ -18,6 +18,10 @@ set +e
     ./scripts/doctor.sh
     /bin/sh -n build.sh scripts/doctor.sh scripts/verify.sh
     ./build.sh "$@"
+    test -s "$app/Contents/Resources/RetroBitmapA.ttf"
+    test -s "$app/Contents/Resources/default.metallib"
+    test "$app/Contents/Resources/default.metallib" -nt RetroStats/PixelUI/BitmapText.metal
+    test ! -e "$app/Contents/Resources/Fonts/NeoDunggeunmo.woff"
     plutil -lint "$app/Contents/Info.plist"
     codesign --verify --strict "$app"
     lipo -verify_arch arm64 "$app/Contents/MacOS/RetroStats"
