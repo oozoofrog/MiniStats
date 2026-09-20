@@ -123,35 +123,14 @@ struct PixelWaveMaskShape: Shape {
 /// type encodes one visual style (wave, fade, flip, etc.). Masks and overlay are
 /// returned as `AnyView` so the active style can be chosen at runtime from
 /// user settings without a separate generic `TransitionContainer` per style.
-///
-/// A style may instead opt into rotational rendering via `isRotational`: the
-/// container then calls `rotationBody(old:new:progress:start:)` with the actual
-/// page views so the transition can fold real content (e.g. a pixel flip clock)
-/// rather than mask it. The `start` timestamp lets a rotational style drive
-/// per-frame progress from a `TimelineView`, since a plain `progress` value is
-/// captured once and won't animate on its own. Mask-based styles leave
-/// `isRotational` at its default `false`.
 protocol PageTransition {
     var seed: Int { get set }
     var color: Color { get }
     var duration: Double { get }
-    var isRotational: Bool { get }
 
     func newPageMask(progress: Double) -> AnyView
     func oldPageMask(progress: Double) -> AnyView
     func overlay(progress: Double, start: Date?) -> AnyView
-    func rotationBody(old: AnyView, new: AnyView, progress: Double, start: Date?) -> AnyView
-}
-
-extension PageTransition {
-    /// Mask-based styles return `false` here. A folding style overrides to
-    /// `true` so `TransitionContainer` uses `rotationBody` instead of masks.
-    var isRotational: Bool { false }
-
-    /// Default no-op; only rotational styles implement this.
-    func rotationBody(old: AnyView, new: AnyView, progress: Double, start: Date?) -> AnyView {
-        AnyView(EmptyView())
-    }
 }
 
 // MARK: - WaveTransition
@@ -241,6 +220,80 @@ struct FadeTransition: PageTransition {
 
 // MARK: - FlipTransition
 
+/// Complementary old/new masks for the square faces of each flip tile. Only
+/// geometry is evaluated here; the page views never enter a Canvas symbol.
+struct FlipPixelMaskShape: Shape {
+    var seed: Int
+    var animatableData: Double
+    var inverted = false
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard let grid = FlipTransition.grid(in: rect.size) else { return path }
+        let face = grid.faceSize
+        for row in 0..<grid.rows {
+            for column in 0..<grid.columns {
+                let x = rect.minX + grid.origin.x + CGFloat(column) * face
+                let y = rect.minY + grid.origin.y + CGFloat(row) * face * 2
+                let hinge = y + face
+                let local = FlipTransition.cellProgress(animatableData, row: row, column: column, seed: seed)
+                let scale = CGFloat(FlipTransition.flapScale(progress: local))
+                if inverted {
+                    if local < 0.5 {
+                        path.addRect(CGRect(x: x, y: hinge, width: face, height: face))
+                        if scale > 0 {
+                            path.addRect(CGRect(x: x, y: hinge - face * scale,
+                                                width: face, height: face * scale))
+                        }
+                    } else if scale < 1 {
+                        path.addRect(CGRect(x: x, y: hinge + face * scale,
+                                            width: face, height: face * (1 - scale)))
+                    }
+                } else if local < 0.5 {
+                    if scale < 1 {
+                        path.addRect(CGRect(x: x, y: y, width: face, height: face * (1 - scale)))
+                    }
+                } else {
+                    path.addRect(CGRect(x: x, y: y, width: face, height: face))
+                    if scale > 0 {
+                        path.addRect(CGRect(x: x, y: hinge, width: face, height: face * scale))
+                    }
+                }
+            }
+        }
+        return path
+    }
+}
+
+/// The narrow remainder at an arbitrary view size crossfades independently of
+/// the complete flip tiles, so no partial face is clipped at an edge.
+struct FlipMarginMaskShape: Shape {
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard let grid = FlipTransition.grid(in: rect.size) else { return path }
+        let frame = CGRect(x: rect.minX + grid.origin.x, y: rect.minY + grid.origin.y,
+                           width: CGFloat(grid.columns) * grid.faceSize,
+                           height: CGFloat(grid.rows) * grid.faceSize * 2)
+        if frame.minX > rect.minX {
+            path.addRect(CGRect(x: rect.minX, y: rect.minY,
+                                width: frame.minX - rect.minX, height: rect.height))
+        }
+        if frame.maxX < rect.maxX {
+            path.addRect(CGRect(x: frame.maxX, y: rect.minY,
+                                width: rect.maxX - frame.maxX, height: rect.height))
+        }
+        if frame.minY > rect.minY {
+            path.addRect(CGRect(x: frame.minX, y: rect.minY,
+                                width: frame.width, height: frame.minY - rect.minY))
+        }
+        if frame.maxY < rect.maxY {
+            path.addRect(CGRect(x: frame.minX, y: frame.maxY,
+                                width: frame.width, height: rect.maxY - frame.maxY))
+        }
+        return path
+    }
+}
+
 /// Each flip tile contains two square faces. Its old upper face folds down
 /// around the horizontal midpoint, then the new lower face unfolds. The new
 /// upper and old lower faces remain underneath the flap. Each tile starts at a
@@ -250,9 +303,7 @@ struct FlipTransition: PageTransition {
     var color: Color
     var duration: Double
 
-    var isRotational: Bool { true }
-
-    static let preferredFaceSize: CGFloat = 25
+    static let preferredFaceSize: CGFloat = 12.5
     private static let cellDuration = 0.45
     private static let latestStart = 1 - cellDuration
 
@@ -308,99 +359,55 @@ struct FlipTransition: PageTransition {
         progress < 0.5
     }
 
-    /// Mask members are unused because `isRotational` is `true`; `TransitionContainer`
-    /// calls `rotationBody` instead. Kept as no-ops to satisfy the protocol.
-    func newPageMask(progress: Double) -> AnyView { AnyView(EmptyView()) }
-    func oldPageMask(progress: Double) -> AnyView { AnyView(EmptyView()) }
-    func overlay(progress: Double, start: Date?) -> AnyView { AnyView(EmptyView()) }
+    func newPageMask(progress: Double) -> AnyView {
+        let p = max(0, min(1, progress))
+        return AnyView(ZStack {
+            FlipPixelMaskShape(seed: seed, animatableData: p)
+                .fill(style: FillStyle(antialiased: false))
+            FlipMarginMaskShape()
+                .fill(style: FillStyle(antialiased: false))
+                .opacity(p)
+        })
+    }
 
-    func rotationBody(old: AnyView, new: AnyView, progress: Double, start: Date?) -> AnyView {
+    func oldPageMask(progress: Double) -> AnyView {
+        let p = max(0, min(1, progress))
+        return AnyView(ZStack {
+            FlipPixelMaskShape(seed: seed, animatableData: p, inverted: true)
+                .fill(style: FillStyle(antialiased: false))
+            FlipMarginMaskShape()
+                .fill(style: FillStyle(antialiased: false))
+                .opacity(1 - p)
+        })
+    }
+
+    func overlay(progress: Double, start: Date?) -> AnyView {
         let duration = self.duration
-        let flipSeed = seed
         let gridColor = color
-        return AnyView(
-            TimelineView(.animation) { context in
-                let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / duration)) }
-                    ?? max(0, min(1, progress))
-                GeometryReader { geometry in
-                    Canvas { ctx, size in
-                        guard let oldPage = ctx.resolveSymbol(id: 0),
-                              let newPage = ctx.resolveSymbol(id: 1),
-                              let grid = Self.grid(in: size) else { return }
-                        let face = grid.faceSize
-                        let tileHeight = face * 2
-                        // Fill only the margins; drawing behind transparent cell
-                        // content would make either page appear twice.
-                        let gridFrame = CGRect(x: grid.origin.x, y: grid.origin.y,
-                                               width: CGFloat(grid.columns) * face,
-                                               height: CGFloat(grid.rows) * tileHeight)
-                        var margins = Path(CGRect(origin: .zero, size: size))
-                        margins.addRect(gridFrame)
-                        var oldBackground = ctx
-                        oldBackground.clip(to: margins, style: FillStyle(eoFill: true, antialiased: false))
-                        oldBackground.opacity = 1 - p
-                        oldBackground.draw(oldPage, at: .zero, anchor: .topLeading)
-                        var newBackground = ctx
-                        newBackground.clip(to: margins, style: FillStyle(eoFill: true, antialiased: false))
-                        newBackground.opacity = p
-                        newBackground.draw(newPage, at: .zero, anchor: .topLeading)
-                        var upper = Path()
-                        var lower = Path()
-                        for row in 0..<grid.rows {
-                            for col in 0..<grid.columns {
-                                let x = grid.origin.x + CGFloat(col) * face
-                                let y = grid.origin.y + CGFloat(row) * tileHeight
-                                upper.addRect(CGRect(x: x, y: y, width: face, height: face))
-                                lower.addRect(CGRect(x: x, y: y + face, width: face, height: face))
-                            }
-                        }
-                        var backgroundTop = ctx
-                        backgroundTop.clip(to: upper, style: FillStyle(antialiased: false))
-                        backgroundTop.draw(newPage, at: .zero, anchor: .topLeading)
-                        var backgroundBottom = ctx
-                        backgroundBottom.clip(to: lower, style: FillStyle(antialiased: false))
-                        backgroundBottom.draw(oldPage, at: .zero, anchor: .topLeading)
-
-                        for row in 0..<grid.rows {
-                            for col in 0..<grid.columns {
-                                let cellProgress = Self.cellProgress(p, row: row, column: col, seed: flipSeed)
-                                let scale = CGFloat(Self.flapScale(progress: cellProgress))
-                                guard scale > 0.001 else { continue }
-                                let oldFace = Self.showsOldFlap(progress: cellProgress)
-                                let x = grid.origin.x + CGFloat(col) * face
-                                let y = grid.origin.y + CGFloat(row) * tileHeight
-                                let hinge = y + face
-                                let target = CGRect(x: x,
-                                                    y: oldFace ? hinge - face * scale : hinge,
-                                                    width: face, height: face * scale)
-                                var flap = ctx
-                                flap.clip(to: Path(target), style: FillStyle(antialiased: false))
-                                flap.translateBy(x: 0, y: hinge * (1 - scale))
-                                flap.scaleBy(x: 1, y: scale)
-                                flap.draw(oldFace ? oldPage : newPage, at: .zero, anchor: .topLeading)
-                            }
-                        }
-                        if p > 0 && p < 1 {
-                            var lines = Path()
-                            for column in 0...grid.columns {
-                                let x = grid.origin.x + CGFloat(column) * face
-                                lines.move(to: CGPoint(x: x, y: gridFrame.minY))
-                                lines.addLine(to: CGPoint(x: x, y: gridFrame.maxY))
-                            }
-                            for faceRow in 0...(grid.rows * 2) {
-                                let y = grid.origin.y + CGFloat(faceRow) * face
-                                lines.move(to: CGPoint(x: gridFrame.minX, y: y))
-                                lines.addLine(to: CGPoint(x: gridFrame.maxX, y: y))
-                            }
-                            ctx.stroke(lines, with: .color(gridColor.opacity(0.14 * sin(p * .pi))), lineWidth: 0.5)
-                        }
-                    } symbols: {
-                        old.frame(width: geometry.size.width, height: geometry.size.height).tag(0)
-                        new.frame(width: geometry.size.width, height: geometry.size.height).tag(1)
-                    }
+        return AnyView(TimelineView(.animation) { context in
+            let p = start.map { min(1, max(0, context.date.timeIntervalSince($0) / duration)) }
+                ?? max(0, min(1, progress))
+            Canvas { ctx, size in
+                guard p > 0, p < 1, let grid = Self.grid(in: size) else { return }
+                let face = grid.faceSize
+                let gridFrame = CGRect(x: grid.origin.x, y: grid.origin.y,
+                                       width: CGFloat(grid.columns) * face,
+                                       height: CGFloat(grid.rows) * face * 2)
+                var lines = Path()
+                for column in 0...grid.columns {
+                    let x = grid.origin.x + CGFloat(column) * face
+                    lines.move(to: CGPoint(x: x, y: gridFrame.minY))
+                    lines.addLine(to: CGPoint(x: x, y: gridFrame.maxY))
                 }
+                for faceRow in 0...(grid.rows * 2) {
+                    let y = grid.origin.y + CGFloat(faceRow) * face
+                    lines.move(to: CGPoint(x: gridFrame.minX, y: y))
+                    lines.addLine(to: CGPoint(x: gridFrame.maxX, y: y))
+                }
+                ctx.stroke(lines, with: .color(gridColor.opacity(0.14 * sin(p * .pi))), lineWidth: 0.5)
             }
-        )
+            .allowsHitTesting(false)
+        })
     }
 }
 

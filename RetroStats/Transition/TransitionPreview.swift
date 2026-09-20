@@ -79,6 +79,11 @@ private struct PreviewSamplePage: View {
                         }
                     }
                 }
+                Picker("Sample mode", selection: .constant(0)) {
+                    Text("One").tag(0)
+                    Text("Two").tag(1)
+                }
+                .pickerStyle(.segmented)
                 Spacer()
                 Text(isA ? "이전 화면" : "다음 화면")
                     .font(.system(size: 13, weight: .semibold, design: .monospaced))

@@ -76,9 +76,9 @@ func transitionSelfTest() {
     // A flip tile contains two square faces around a horizontal hinge. The
     // old upper face folds down, then the new lower face opens downward.
     let panelGrid = FlipTransition.grid(in: CGSize(width: 400, height: 600))!
-    precondition(panelGrid.columns == 16 && panelGrid.rows == 12 && panelGrid.faceSize == 25,
-                 "The 400×600 panel must use 192 tiles with 384 square faces")
-    precondition(panelGrid.columns * panelGrid.rows * 2 == 384)
+    precondition(panelGrid.columns == 32 && panelGrid.rows == 24 && panelGrid.faceSize == 12.5,
+                 "The 400×600 panel must use 768 tiles with 1536 square faces")
+    precondition(panelGrid.columns * panelGrid.rows == 768)
     precondition(panelGrid.origin == .zero)
     precondition(FlipTransition.grid(in: .zero) == nil)
     precondition(FlipTransition.grid(in: CGSize(width: CGFloat.infinity, height: 200)) == nil)
@@ -123,12 +123,30 @@ func transitionSelfTest() {
     let inFlight = flipCells.map { FlipTransition.cellProgress(0.6, row: $0.0, column: $0.1, seed: 7) }
     precondition(inFlight.contains(1) && inFlight.contains(where: { $0 < 1 }),
                  "At an intermediate time some pixels should finish while others flip")
-    // Only the flip transition is rotational; wave/fade stay mask-based.
-    precondition(FlipTransition(seed: 0, color: .primary, duration: 0.5).isRotational == true, "Flip transition should be rotational")
-    precondition(WaveTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Wave transition should not be rotational")
-    precondition(FadeTransition(seed: 0, color: .primary, duration: 0.5).isRotational == false, "Fade transition should not be rotational")
+    // Flip masks cover each square face exactly once without resolving the
+    // actual page hierarchy inside Canvas (which can include AppKit controls).
+    let flipRect = CGRect(x: 0, y: 0, width: 200, height: 120)
+    let flipGrid = FlipTransition.grid(in: flipRect.size)!
+    for p in [0.0, 0.2, 0.5, 0.8, 1.0] {
+        let oldMask = FlipPixelMaskShape(seed: 7, animatableData: p, inverted: true).path(in: flipRect)
+        let newMask = FlipPixelMaskShape(seed: 7, animatableData: p).path(in: flipRect)
+        for row in 0..<flipGrid.rows {
+            for column in 0..<flipGrid.columns {
+                let x = flipGrid.origin.x + (CGFloat(column) + 0.37) * flipGrid.faceSize
+                for faceY in [0.17, 0.41, 0.73, 1.18, 1.39, 1.77] {
+                    let y = flipGrid.origin.y + (CGFloat(row) * 2 + faceY) * flipGrid.faceSize
+                    let point = CGPoint(x: x, y: y)
+                    precondition(oldMask.contains(point) != newMask.contains(point),
+                                 "Old and new flip masks must be complementary at progress \(p)")
+                }
+            }
+        }
+    }
+    let margin = FlipMarginMaskShape().path(in: CGRect(x: 0, y: 0, width: 310, height: 430))
+    precondition(margin.contains(CGPoint(x: 1, y: 215)))
+    precondition(!margin.contains(CGPoint(x: 155, y: 215)))
 
-    print("PASS: wave mask endpoints and seed variation, complementary pixel dissolve masks, seeded per-pixel flip timing")
+    print("PASS: wave mask endpoints and seed variation, complementary dissolve and flip masks, seeded per-pixel timing")
 
     // Transition style selection: default is wave, every style round-trips
     // through UserDefaults, unknown values fall back, and each style produces a

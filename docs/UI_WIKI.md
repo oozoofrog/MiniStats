@@ -164,12 +164,12 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 
 | 컴포넌트 | 역할 |
 | --- | --- |
-| `PageTransition` | 프로토콜. 마스크(`newPageMask`/`oldPageMask`/`overlay`) 또는 회전(`rotationBody`) 경로를 `AnyView`로 반환. `isRotational`로 경로 선택 |
+| `PageTransition` | 프로토콜. 이전·새 페이지의 마스크(`oldPageMask`/`newPageMask`)와 효과 오버레이를 `AnyView`로 반환 |
 | `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(seed:color:duration:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
 | `TransitionSpeed` | `slow`/`normal`/`fast` enum. `duration`으로 1.0/0.5/0.25초 매핑. UserDefaults(`transitionSpeed` 키)로 영속 |
 | `WaveTransition` | 파도 위프 트랜지션 (`PixelWaveMaskShape` + `PixelTransition` 밴드 오버레이) |
 | `FadeTransition` | 8pt 블록 Bayer 디더 마스크로 이전/새 페이지를 상보적으로 교체. 화면에는 Dissolve로 표시 |
-| `FlipTransition` | 뷰 크기에서 각 면이 정사각형인 플립 격자를 계산. 기본 400×600pt 화면은 16열×12행의 25×50pt 타일 192개이며, 위·아래 25×25pt 정사각형 면은 총 384개. 전환 시드와 타일 좌표로 시작 지연을 각각 정하며 두 화면을 Canvas 심벌로 재사용 |
+| `FlipTransition` | 뷰 크기에서 각 면이 정사각형인 플립 격자를 계산. 기본 400×600pt 화면은 32열×24행의 12.5×25pt 타일 768개이며, 위·아래 12.5×12.5pt 정사각형 면은 총 1,536개. 전환 시드와 타일 좌표로 시작 지연을 각각 정하고 상보적인 마스크로 두 화면을 전환 |
 | `PixelTransition` | 파도 밴드 픽셀 오버레이. `TimelineView(.animation)`으로 시간 기반 렌더 |
 | `PixelWaveMaskShape` | Animatable Shape. 4pt 계단형 파도 경계로 새/이전 페이지를 상보적으로 클리핑 |
 | `PixelTransition.harmonics(seed:)` | 시드 기반 5중 하모닉 파도 형태 생성 (전환마다 다른 랜덤 형태) |
@@ -197,17 +197,14 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 4. 완료 후 상태를 정리하고, 그 사이 다른 페이지가 요청됐다면 마지막 요청으로 다음 전환을 시작한다.
 5. 효과가 진행되는 동안 화면 내용은 입력과 접근성 포커스에서 제외된다.
 
-전환 중 ZStack (스타일에 따라 두 경로 중 하나):
+전환 중 ZStack (wave/dissolve/flip 공통 마스크 경로):
 
-**마스크 경로** (`isRotational == false`, wave/fade):
 - 배경: 완료 후 표시할 새 페이지 (전환 중에는 숨김)
 - 위: 새 페이지, `.mask { transition.newPageMask(progress) }` — 스타일별 새 페이지 영역만 드러남
 - 그 아래: 이전 페이지, `.mask { transition.oldPageMask(progress) }` — 스타일별 이전 페이지 영역만 유지
-- 최상: `transition.overlay(progress, start:)` 스타일별 효과 오버레이 (파도 밴드 등)
+- 최상: `transition.overlay(progress, start:)` 스타일별 효과 오버레이 (파도 밴드·플립 격자선 등)
 
-**회전 경로** (`isRotational == true`, flip):
-- `transition.rotationBody(old:new:progress:start:)`가 이전/새 페이지를 받아 셀별 접힘을 직접 렌더. 마스크·오버레이 미사용
-- flip: 각 타일을 정사각형인 윗면·아랫면 두 장으로 구성한다. 뷰 크기에서 면의 한 변을 약 25pt로 계산하고, 타일은 그 두 배 높이로 배치한다. 400×600pt 화면에는 16×12 = 192개의 25×50pt 타일과 384개의 25×25pt 면이 남김없이 들어간다. 다른 종횡비에서 남는 가장자리는 이전·새 화면을 혼합해 채운다. 이전 상단이 0°→90°로 접힌 뒤 새 하단이 90°→0°로 아래에 펼쳐지고, 전환 중에는 면의 정사각형 경계를 옅게 표시한다. 각 타일은 전환 길이의 0~55% 사이에 시작해 45%의 시간 동안 접히므로 먼저 시작한 타일이 먼저 완료된다. 전환 시드로 시작 순서를 고정해 프레임마다 바뀌지 않게 한다. Canvas 심벌은 두 화면을 한 번씩 준비하고 타일별 클리핑에 재사용한다.
+- flip: 각 타일을 정사각형인 윗면·아랫면 두 장으로 구성한다. 뷰 크기에서 면의 한 변을 약 12.5pt로 계산하고, 타일은 그 두 배 높이로 배치한다. 400×600pt 화면에는 32×24 = 768개의 12.5×25pt 타일과 1,536개의 12.5×12.5pt 면이 남김없이 들어간다. 다른 종횡비에서 남는 가장자리는 이전·새 화면을 혼합해 채운다. 이전 상단의 마스크 영역이 중심축으로 접히듯 줄고 새 하단의 마스크 영역이 펼쳐지듯 넓어진다. 전환 중에는 면의 정사각형 경계를 옅게 표시한다. 각 타일은 전환 길이의 0~55% 사이에 시작해 45%의 시간 동안 바뀌므로 먼저 시작한 타일이 먼저 완료된다. 전환 시드로 시작 순서를 고정해 프레임마다 바뀌지 않게 한다. Canvas 오버레이는 격자선만 그리며 페이지 콘텐츠를 심벌로 해석하지 않는다.
 
 ---
 

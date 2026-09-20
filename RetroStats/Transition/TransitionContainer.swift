@@ -52,26 +52,15 @@ struct TransitionContainer<Content: View>: View {
                 .allowsHitTesting(!isTransitioning)
                 .accessibilityHidden(isTransitioning)
             if isTransitioning, let previousPage = pages?.previous {
-                if effect.isRotational {
-                    effect.rotationBody(
-                        old: AnyView(content(previousPage)),
-                        new: AnyView(content(visiblePage)),
-                        progress: progress,
-                        start: transitionStart
-                    )
+                content(previousPage)
+                    .mask { effect.oldPageMask(progress: progress) }
                     .allowsHitTesting(false)
                     .accessibilityHidden(true)
-                } else {
-                    content(previousPage)
-                        .mask { effect.oldPageMask(progress: progress) }
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    content(visiblePage)
-                        .mask { effect.newPageMask(progress: progress) }
-                        .allowsHitTesting(false)
-                        .accessibilityHidden(true)
-                    effect.overlay(progress: progress, start: transitionStart)
-                }
+                content(visiblePage)
+                    .mask { effect.newPageMask(progress: progress) }
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
+                effect.overlay(progress: progress, start: transitionStart)
             }
         }
         .onChange(of: currentPage) { old, new in
