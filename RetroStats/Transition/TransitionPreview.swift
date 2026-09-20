@@ -6,9 +6,18 @@ import SwiftUI
 /// storage, or login-item side effects. Auto-cycles between two pages so the
 /// animation repeats; the style/speed pickers let you compare each transition.
 struct TransitionPreview: View {
-    var style: TransitionStyle = .flip
-    var speed: TransitionSpeed = .normal
-    var autoCycle: Bool = true
+    @State private var style: TransitionStyle
+    @State private var speed: TransitionSpeed
+    let autoCycle: Bool
+    let panelSize: CGSize
+
+    init(style: TransitionStyle = .flip, speed: TransitionSpeed = .normal, autoCycle: Bool = true,
+         panelSize: CGSize = CGSize(width: 400, height: 600)) {
+        _style = State(initialValue: style)
+        _speed = State(initialValue: speed)
+        self.autoCycle = autoCycle
+        self.panelSize = panelSize
+    }
 
     @State private var page: DashboardPage = .overview
     @State private var timer: Timer?
@@ -21,21 +30,21 @@ struct TransitionPreview: View {
             ) { p in
                 PreviewSamplePage(page: p)
             }
-            .frame(width: 400, height: 600)
+            .frame(width: panelSize.width, height: panelSize.height)
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
             .overlay(
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
                     .stroke(Color.primary.opacity(0.1), lineWidth: 1)
             )
 
-            TransitionPreviewControls(style: style, speed: speed, page: $page, autoCycle: autoCycle)
+            TransitionPreviewControls(style: $style, speed: $speed, page: $page)
                 .padding(.top, 12)
         }
         .padding(16)
         .background(Color(.windowBackgroundColor))
         .onAppear { startTimerIfNeeded() }
         .onDisappear { timer?.invalidate() }
-        .onChange(of: autoCycle) { _, _ in startTimerIfNeeded() }
+        .onChange(of: speed) { _, _ in startTimerIfNeeded() }
     }
 
     private func startTimerIfNeeded() {
@@ -82,10 +91,9 @@ private struct PreviewSamplePage: View {
 }
 
 private struct TransitionPreviewControls: View {
-    var style: TransitionStyle
-    var speed: TransitionSpeed
+    @Binding var style: TransitionStyle
+    @Binding var speed: TransitionSpeed
     @Binding var page: DashboardPage
-    var autoCycle: Bool
 
     var body: some View {
         VStack(spacing: 10) {
@@ -94,22 +102,20 @@ private struct TransitionPreviewControls: View {
                 Spacer()
                 Text(style.label).foregroundStyle(.secondary)
             }
-            Picker("스타일", selection: .constant(style)) {
+            Picker("스타일", selection: $style) {
                 ForEach(TransitionStyle.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
-            .disabled(true)
 
             HStack {
                 Text("속도").font(.system(size: 12, weight: .semibold, design: .monospaced))
                 Spacer()
                 Text(speed.label).foregroundStyle(.secondary)
             }
-            Picker("속도", selection: .constant(speed)) {
+            Picker("속도", selection: $speed) {
                 ForEach(TransitionSpeed.allCases, id: \.self) { Text($0.label).tag($0) }
             }
             .pickerStyle(.segmented)
-            .disabled(true)
 
             HStack(spacing: 10) {
                 Button("A → B 전환") { page = (page == .overview) ? .settings : .overview }
@@ -137,11 +143,15 @@ private struct TransitionPreviewControls: View {
     TransitionPreview(style: .flip, speed: .slow)
 }
 
+#Preview("Flip · 310×430") {
+    TransitionPreview(style: .flip, speed: .slow, panelSize: CGSize(width: 310, height: 430))
+}
+
 #Preview("Wave · 보통") {
     TransitionPreview(style: .wave, speed: .normal)
 }
 
-#Preview("Fade · 보통") {
+#Preview("Dissolve · 보통") {
     TransitionPreview(style: .fade, speed: .normal)
 }
 #endif

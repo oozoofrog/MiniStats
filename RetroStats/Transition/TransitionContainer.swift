@@ -1,10 +1,34 @@
 import SwiftUI
 
-/// Manages page transition state and rendering. Encapsulates the progress
-/// animation, previous-page tracking, and seed-based randomization so
-/// `DashboardView` only calls `transitionTo(_:)` and provides page content.
-/// `transition` is an existential `any PageTransition` so the active style can
-/// be swapped from user settings without rebuilding the view tree.
+/// Page routing is independent of the animation clock so rapid requests cannot
+/// replace the page currently being revealed.
+struct TransitionPages {
+    private(set) var visible: DashboardPage
+    private(set) var previous: DashboardPage?
+    private(set) var requested: DashboardPage
+
+    init(initial: DashboardPage) {
+        visible = initial
+        requested = initial
+    }
+
+    mutating func request(_ page: DashboardPage) -> Bool {
+        requested = page
+        return beginPending()
+    }
+
+    mutating func finish() { previous = nil }
+
+    mutating func beginPending() -> Bool {
+        guard previous == nil, visible != requested else { return false }
+        previous = visible
+        visible = requested
+        return true
+    }
+}
+
+/// Keeps the incoming page fixed until its transition finishes. Page changes
+/// received during an animation are played afterward, with the latest winning.
 struct TransitionContainer<Content: View>: View {
     let transition: any PageTransition
     let currentPage: DashboardPage
@@ -12,67 +36,92 @@ struct TransitionContainer<Content: View>: View {
 
     @State private var progress: Double = 0
     @State private var transitionStart: Date?
-    @State private var seed: Int = 0
-    @State private var previousPage: DashboardPage?
+    @State private var activeTransition: (any PageTransition)?
+    @State private var pages: TransitionPages?
     @State private var gen = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    var isTransitioning: Bool { previousPage != nil && !reduceMotion }
+    private var isTransitioning: Bool { pages?.previous != nil && !reduceMotion }
+    private var visiblePage: DashboardPage { pages?.visible ?? currentPage }
 
     var body: some View {
+        let effect = activeTransition ?? transition
         ZStack(alignment: .top) {
-            content(currentPage)
+            content(visiblePage)
                 .opacity(isTransitioning ? 0 : 1)
-            if isTransitioning {
-                if transition.isRotational {
-                    transition.rotationBody(
-                        old: AnyView(content(previousPage!)),
-                        new: AnyView(content(currentPage)),
+                .allowsHitTesting(!isTransitioning)
+                .accessibilityHidden(isTransitioning)
+            if isTransitioning, let previousPage = pages?.previous {
+                if effect.isRotational {
+                    effect.rotationBody(
+                        old: AnyView(content(previousPage)),
+                        new: AnyView(content(visiblePage)),
                         progress: progress,
                         start: transitionStart
                     )
+                    .allowsHitTesting(false)
+                    .accessibilityHidden(true)
                 } else {
-                    content(previousPage!)
-                        .mask {
-                            transition.oldPageMask(progress: progress)
-                        }
-                    content(currentPage)
-                        .mask {
-                            transition.newPageMask(progress: progress)
-                        }
-                    transition.overlay(progress: progress, start: transitionStart)
+                    content(previousPage)
+                        .mask { effect.oldPageMask(progress: progress) }
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    content(visiblePage)
+                        .mask { effect.newPageMask(progress: progress) }
+                        .allowsHitTesting(false)
+                        .accessibilityHidden(true)
+                    effect.overlay(progress: progress, start: transitionStart)
                 }
             }
         }
         .onChange(of: currentPage) { old, new in
-            guard !reduceMotion, old != new, previousPage == nil else { return }
-            startTransition(from: old, to: new)
+            guard !reduceMotion else {
+                resetTransition()
+                return
+            }
+            if pages == nil { pages = TransitionPages(initial: old) }
+            if pages!.request(new) { startTransition() }
+        }
+        .onChange(of: reduceMotion) { _, enabled in
+            if enabled { resetTransition() }
         }
     }
 
-    func transitionTo(_ page: DashboardPage) {
-        guard !reduceMotion, currentPage != page else { return }
-        startTransition(from: currentPage, to: page)
-    }
-
-    private func startTransition(from old: DashboardPage, to new: DashboardPage) {
+    private func startTransition() {
         gen += 1
         let myGen = gen
-        previousPage = old
-        seed = Int.random(in: 1...1_000_000)
+        var effect = transition
+        effect.seed = Int.random(in: 1...1_000_000)
+        activeTransition = effect
         transitionStart = .now
         progress = 0
-        withAnimation(.linear(duration: transition.duration)) {
+        withAnimation(.linear(duration: effect.duration)) {
             progress = 1
         }
         Task {
-            try? await Task.sleep(for: .milliseconds(Int(transition.duration * 1000) + 100))
+            try? await Task.sleep(for: .milliseconds(Int(effect.duration * 1000) + 100))
             await MainActor.run {
                 guard myGen == gen else { return }
                 transitionStart = nil
-                previousPage = nil
+                pages?.finish()
+                activeTransition = nil
                 progress = 0
+                // Give the completed page a render pass before animating the
+                // next request from progress zero.
+                Task { @MainActor in
+                    await Task.yield()
+                    guard !reduceMotion else { return }
+                    if pages?.beginPending() == true { startTransition() }
+                }
             }
         }
+    }
+
+    private func resetTransition() {
+        gen += 1
+        transitionStart = nil
+        pages = TransitionPages(initial: currentPage)
+        activeTransition = nil
+        progress = 0
     }
 }

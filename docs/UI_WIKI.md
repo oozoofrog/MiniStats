@@ -25,16 +25,16 @@
 
 `DashboardPage` enum: `overview`, `processes`, `storage`, `settings`
 
-페이지 전환은 `transitionTo(_:)`로만 수행해야 한다. 외부(AppDelegate 등)에서 직접 `model.page`를 변경하면 트랜지션 없이 즉시 전환된다.
+`model.page`가 바뀌면 `TransitionContainer`가 변경을 감지해 전환한다. 전환 중 요청은 마지막 페이지를 기억했다가 현재 효과가 끝난 뒤 실행한다. macOS의 동작 줄이기 설정에서는 즉시 전환한다.
 
 ## Header
 
 | 요소 | 심볼 | 위치 | 설명 |
 | --- | --- | --- | --- |
-| 뒤로 버튼 | `Image(chevron.left)` | 좌측 | `model.page != .overview`일 때 표시. `transitionTo(.overview)` 호출 |
+| 뒤로 버튼 | `Image(chevron.left)` | 좌측 | `model.page != .overview`일 때 표시. `model.page = .overview` |
 | 타이틀 | `Text(title)` | 좌측 | 페이지별 제목 (RetroStats / 프로세스 / 스토리지 정리 / 설정) |
 | 실시간 표시 | `Text("실시간")` + `PixelLED` | 우측 | `.overview`에서만 표시 |
-| 설정 버튼 | `PixelSliders` | 우측 | `transitionTo(.settings)` 호출 |
+| 설정 버튼 | `PixelSliders` | 우측 | `model.page = .settings` |
 
 ## Footer
 
@@ -56,7 +56,7 @@
 | CPU 카드 | `metric(order: .cpu, ...)` | LCDScreen에 큰 숫자% + HistoryLine. 탭 시 `.processes` 전환 |
 | 메모리 카드 | `metric(order: .memory, ...)` | LCDScreen에 큰 숫자% + HistoryLine. 탭 시 `.processes` 전환 |
 | 네트워크 | `Label("네트워크")` | 다운로드(↓) / 업로드(↑) 속도 |
-| 스토리지 카드 | `Button { transitionTo(.storage) }` | 디스크 % + UsageBar + 여유 공간 + 정리 후보. 탭 시 `.storage` 전환 |
+| 스토리지 카드 | `Button { model.page = .storage }` | 디스크 % + UsageBar + 여유 공간 + 정리 후보. 탭 시 `.storage` 전환 |
 | 배터리/활성상태 | `Text(battery)` + `Button("활성 상태 보기")` | 배터리 상태 + 활성 상태 보기 실행 |
 
 ### Metric 카드 구조 (`metric(order:value:subtitle:history:)`)
@@ -168,44 +168,46 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(seed:color:duration:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
 | `TransitionSpeed` | `slow`/`normal`/`fast` enum. `duration`으로 1.0/0.5/0.25초 매핑. UserDefaults(`transitionSpeed` 키)로 영속 |
 | `WaveTransition` | 파도 위프 트랜지션 (`PixelWaveMaskShape` + `PixelTransition` 밴드 오버레이) |
-| `FadeTransition` | 페이드 크로스페이드. 불투명도 마스크만 사용 |
-| `FlipTransition` | 픽셀 플립. Y축 0°→180° 회전으로 앞면(old)→뒷면(new) 교체. `isRotational=true`라 마스크 대신 `rotationBody` 사용. 현재 1×1(화면 전체 1셀) 단계 |
+| `FadeTransition` | 8pt 블록 Bayer 디더 마스크로 이전/새 페이지를 상보적으로 교체. 화면에는 Dissolve로 표시 |
+| `FlipTransition` | 뷰 크기에서 각 면이 정사각형인 플립 격자를 계산. 기본 400×600pt 화면은 16열×12행의 25×50pt 타일 192개이며, 위·아래 25×25pt 정사각형 면은 총 384개. 전환 시드와 타일 좌표로 시작 지연을 각각 정하며 두 화면을 Canvas 심벌로 재사용 |
 | `PixelTransition` | 파도 밴드 픽셀 오버레이. `TimelineView(.animation)`으로 시간 기반 렌더 |
-| `PixelWaveMaskShape` | Animatable Shape. 파도 왼쪽(지나간 영역)을 채워 새 페이지 클리핑 |
+| `PixelWaveMaskShape` | Animatable Shape. 4pt 계단형 파도 경계로 새/이전 페이지를 상보적으로 클리핑 |
 | `PixelTransition.harmonics(seed:)` | 시드 기반 5중 하모닉 파도 형태 생성 (전환마다 다른 랜덤 형태) |
 | `PixelTransition.waveFront(y:progress:width:harmonics:)` | 특정 y에서 파도 경계 x 계산 |
 
-`TransitionContainer`는 `any PageTransition`을 받아 제네릭이 아닌 단일 구조로 동작하므로, 설정에서 선택한 스타일이 즉시 적용된다.
+`TransitionContainer`는 `any PageTransition`을 받아 설정에서 선택한 스타일을 다음 전환에 적용한다. 진행 중인 전환은 시작할 때 선택한 효과·속도·시드를 유지한다.
 
 ### 트랜지션 상태 변수
 
 | 변수 | 타입 | 설명 |
 | --- | --- | --- |
-| `transitionProgress` | `Double` | 0→1 애니메이션 진행도. `withAnimation`으로 구동 |
+| `progress` | `Double` | 0→1 애니메이션 진행도. `withAnimation`으로 구동 |
 | `transitionStart` | `Date?` | 파도 밴드 오버레이용 시작 시각 |
-| `transitionSeed` | `Int` | 파도 형태 시드 (전환마다 난수) |
-| `previousPage` | `DashboardPage?` | 전환 중 이전 페이지. `nil`이면 전환 아님 |
-| `transitionGen` | `Int` | 세대 카운터. 이전 전환의 정리 Task 무시용 |
+| `activeTransition` | `PageTransition?` | 전환마다 뽑은 시드와 선택 당시 효과·속도를 보관 |
+| `pages.visible` | `DashboardPage` | 진행 중인 효과의 고정된 새 페이지 |
+| `pages.previous` | `DashboardPage?` | 전환 중 이전 페이지. `nil`이면 전환 아님 |
+| `pages.requested` | `DashboardPage` | 전환 중 마지막으로 요청된 페이지 |
+| `gen` | `Int` | 세대 카운터. 이전 전환의 정리 Task 무시용 |
 
-### 트랜지션 동작 (`transitionTo`)
+### 트랜지션 동작 (`currentPage` 변경)
 
-1. `previousPage = model.page` (이전 페이지 저장)
-2. `transitionSeed = Int.random(...)` (파도 형태 결정)
-3. `transitionProgress = 0`, `model.page = page` (새 페이지로 전환)
-4. `withAnimation(.linear(duration: 2.0)) { transitionProgress = 1 }` (마스크 애니메이션)
-5. 2.1초 후 정리: `previousPage = nil`, `transitionProgress = 0`
+1. 이전 페이지를 저장하고 새 페이지를 `pages.visible`에 고정한다.
+2. 전환마다 새 시드를 뽑아 선택한 효과에 적용한다.
+3. 선택한 속도로 `progress`를 0→1 애니메이션한다.
+4. 완료 후 상태를 정리하고, 그 사이 다른 페이지가 요청됐다면 마지막 요청으로 다음 전환을 시작한다.
+5. 효과가 진행되는 동안 화면 내용은 입력과 접근성 포커스에서 제외된다.
 
 전환 중 ZStack (스타일에 따라 두 경로 중 하나):
 
 **마스크 경로** (`isRotational == false`, wave/fade):
-- 배경: 이전 페이지 (전체)
+- 배경: 완료 후 표시할 새 페이지 (전환 중에는 숨김)
 - 위: 새 페이지, `.mask { transition.newPageMask(progress) }` — 스타일별 새 페이지 영역만 드러남
 - 그 아래: 이전 페이지, `.mask { transition.oldPageMask(progress) }` — 스타일별 이전 페이지 영역만 유지
 - 최상: `transition.overlay(progress, start:)` 스타일별 효과 오버레이 (파도 밴드 등)
 
 **회전 경로** (`isRotational == true`, flip):
-- `transition.rotationBody(old:new:progress:)`가 이전/새 페이지를 받아 직접 3D 회전 렌더. 마스크·오버레이 미사용
-- flip 1×1: 화면 전체가 Y축 0°→180° 회전, 90°에서 앞면(old)→뒷면(new) 면 교체
+- `transition.rotationBody(old:new:progress:start:)`가 이전/새 페이지를 받아 셀별 접힘을 직접 렌더. 마스크·오버레이 미사용
+- flip: 각 타일을 정사각형인 윗면·아랫면 두 장으로 구성한다. 뷰 크기에서 면의 한 변을 약 25pt로 계산하고, 타일은 그 두 배 높이로 배치한다. 400×600pt 화면에는 16×12 = 192개의 25×50pt 타일과 384개의 25×25pt 면이 남김없이 들어간다. 다른 종횡비에서 남는 가장자리는 이전·새 화면을 혼합해 채운다. 이전 상단이 0°→90°로 접힌 뒤 새 하단이 90°→0°로 아래에 펼쳐지고, 전환 중에는 면의 정사각형 경계를 옅게 표시한다. 각 타일은 전환 길이의 0~55% 사이에 시작해 45%의 시간 동안 접히므로 먼저 시작한 타일이 먼저 완료된다. 전환 시드로 시작 순서를 고정해 프레임마다 바뀌지 않게 한다. Canvas 심벌은 두 화면을 한 번씩 준비하고 타일별 클리핑에 재사용한다.
 
 ---
 
