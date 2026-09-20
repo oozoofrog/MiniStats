@@ -8,6 +8,7 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
     NSApplication.shared.run()
 } else if CommandLine.arguments.contains("--self-test") {
     selfTest()
+    MainActor.assumeIsolated { bitmapTextSelfTest() }
     do {
         try storageSelfTest()
         // derivedDataSelfTest is async; drive it with a Task + semaphore. It uses

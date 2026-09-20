@@ -1,5 +1,90 @@
 import Foundation
 import CoreText
+import AppKit
+import SwiftUI
+
+private struct BitmapMask: Equatable {
+    let width: Int
+    let height: Int
+    let pixels: [Bool]
+}
+
+private func bitmapMask(_ bitmap: NSBitmapImageRep, x: Range<Int>, y: Range<Int>) -> BitmapMask {
+    var dark: [(Int, Int)] = []
+    for row in y {
+        for column in x {
+            if let color = bitmap.colorAt(x: column, y: row)?.usingColorSpace(.deviceRGB),
+               color.redComponent < 0.9 {
+                dark.append((column, row))
+            }
+        }
+    }
+    guard let minX = dark.map(\.0).min(), let maxX = dark.map(\.0).max(),
+          let minY = dark.map(\.1).min(), let maxY = dark.map(\.1).max() else {
+        return BitmapMask(width: 0, height: 0, pixels: [])
+    }
+    let width = maxX - minX + 1
+    let height = maxY - minY + 1
+    var pixels = [Bool](repeating: false, count: width * height)
+    for (column, row) in dark {
+        pixels[(row - minY) * width + column - minX] = true
+    }
+    return BitmapMask(width: width, height: height, pixels: pixels)
+}
+
+@MainActor func bitmapTextSelfTest() {
+    _ = NSApplication.shared
+    let samples: [(String, CGFloat)] = [("i", 0.6), ("W", 0.6), ("8", 0.6), ("한", 0.8), ("글", 0.8)]
+    let styles: [(String, HierarchicalShapeStyle)] = [("primary", .primary), ("secondary", .secondary)]
+    for (styleName, style) in styles {
+        for scale in [1.0, 2.0] {
+            for size in [11.0, 13.0, 16.0, 18.0] {
+                for (character, advanceRatio) in samples {
+                    func render(_ offset: CGFloat) -> NSBitmapImageRep {
+                        let content = Text(String(repeating: character, count: 20))
+                            .font(.bitmap(size))
+                            .foregroundStyle(style)
+                            .textRenderer(BitmapTextRenderer())
+                            .fixedSize()
+                            .offset(x: offset, y: offset)
+                            .frame(width: 400, height: 50, alignment: .topLeading)
+                            .background(Color.white)
+                            .environment(\.colorScheme, .light)
+                        let renderer = ImageRenderer(content: content)
+                        renderer.scale = scale
+                        guard let image = renderer.cgImage else { preconditionFailure("Bitmap text did not render") }
+                        return NSBitmapImageRep(cgImage: image)
+                    }
+                    let bitmap = render(0)
+                    let advance = size * advanceRatio * scale
+                    var reference: BitmapMask?
+                    for index in 0..<20 {
+                        let start = Int((CGFloat(index) * advance).rounded())
+                        let end = Int((CGFloat(index + 1) * advance).rounded())
+                        let mask = bitmapMask(bitmap, x: start..<end, y: 0..<Int(50 * scale))
+                        precondition(mask.width > 0 && mask.height > 0, "Missing bitmap glyph: \(character)")
+                        if let reference {
+                            precondition(mask == reference,
+                                         "Bitmap glyph changes with position: \(character), \(size)pt at \(scale)x (\(styleName))")
+                        } else {
+                            reference = mask
+                        }
+                    }
+                    if size == 13 && (character == "i" || character == "한") {
+                        let fullWidth = Int(400 * scale)
+                        let fullHeight = Int(50 * scale)
+                        let baseline = bitmapMask(bitmap, x: 0..<fullWidth, y: 0..<fullHeight)
+                        for offset in [0.25, 0.5, 0.75] {
+                            precondition(bitmapMask(render(offset), x: 0..<fullWidth, y: 0..<fullHeight) == baseline,
+                                         "Bitmap text changes when moved: \(character), \(scale)x (\(styleName))")
+                        }
+                    }
+                }
+            }
+        }
+    }
+    print("PASS: bitmap glyph shape and text translation at 1x/2x, primary/secondary")
+}
 
 func selfTest() {
     precondition(RetroBitmapFont.registered, "RetroBitmapA registration failed")

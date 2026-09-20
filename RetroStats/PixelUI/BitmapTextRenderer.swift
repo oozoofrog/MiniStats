@@ -1,18 +1,35 @@
 import SwiftUI
 
-/// Snaps rendered glyphs to the pixel grid and removes antialiasing.
+/// Snaps rendered glyphs to the font's grid and removes antialiasing.
 /// RetroBitmapA supplies authored glyphs; unsupported Unicode keeps system fallback.
 struct BitmapTextRenderer: TextRenderer {
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
+        let displayScale = context.environment.displayScale
+        // Keep the 11-cell Hangul glyphs legible even on 1x displays before sampling.
+        let sourceScale: CGFloat = displayScale < 1.5 ? 4 : 2
         for line in layout {
-            let bounds = line.typographicBounds
-            let pixel = max(CGFloat(0.5), (bounds.ascent + bounds.descent) / 10)
-            context.drawLayer { layer in
-                layer.addFilter(
-                    .layerShader(ShaderLibrary.bitmapText(.float(Float(pixel))),
-                                 maxSampleOffset: CGSize(width: pixel, height: pixel))
-                )
-                layer.draw(line)
+            for run in line {
+                for glyph in run {
+                    let bounds = glyph.typographicBounds
+                    let em = bounds.ascent + bounds.descent
+                    let authoredHangul = abs(bounds.width / em - 0.8) < 0.01
+                    let pixel = max(CGFloat(0.5), em * (authoredHangul ? 0.07 : 0.1))
+                    context.drawLayer { layer in
+                        layer.addFilter(
+                            .layerShader(ShaderLibrary.bitmapText(.float(Float(pixel)),
+                                                                  .float2(Float(bounds.origin.x), Float(bounds.origin.y)),
+                                                                  .float(Float(displayScale)),
+                                                                  .float(Float(sourceScale)),
+                                                                  .float3(Float(bounds.width), Float(bounds.ascent), Float(bounds.descent))),
+                                         maxSampleOffset: CGSize(width: pixel * sourceScale + (sourceScale - 1) * bounds.width,
+                                                                 height: pixel * sourceScale + (sourceScale - 1) * em))
+                        )
+                        layer.translateBy(x: bounds.origin.x, y: bounds.origin.y)
+                        layer.scaleBy(x: sourceScale, y: sourceScale)
+                        layer.translateBy(x: -bounds.origin.x, y: -bounds.origin.y)
+                        layer.draw(glyph)
+                    }
+                }
             }
         }
     }
