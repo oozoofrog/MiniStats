@@ -26,9 +26,10 @@ private struct BitmapStatusText: View {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
     private let dashboard = DashboardModel()
     private let popover = TransparentPopover()
+    private var dashboardWindow: NSWindow?
     private let status = NSStatusBar.system.statusItem(withLength: 38)
     private let readout = NSHostingView(rootView: BitmapStatusText(cpu: nil, memory: nil))
     private let warningIcon = NSImageView()
@@ -62,12 +63,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         dashboard.storage = storage
         dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }
         dashboard.quit = { [weak self] in self?.quitApp() }
-        popover.contentViewController = DashboardSurfaceController(model: dashboard)
-        popover.contentSize = NSSize(width: 400, height: 600)
+        popover.contentViewController = NSHostingController(rootView: MenuPopoverView(model: dashboard) { [weak self] page, order in
+            self?.openDashboard(page: page, order: order)
+        })
+        popover.contentSize = RetroLayout.popoverSize
         popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
         popover.delegate = self
         status.button?.target = self
         status.button?.action = #selector(toggleDashboard)
+        installMainMenu()
 
         updateStorageWarning()
         if !UserDefaults.standard.bool(forKey: "loginConfigured") {
@@ -82,7 +86,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         if CommandLine.arguments.contains("--show-dashboard") || CommandLine.arguments.contains("--show-storage") {
-            DispatchQueue.main.async { self.showDashboard(storage: CommandLine.arguments.contains("--show-storage")) }
+            DispatchQueue.main.async { self.openDashboard(page: CommandLine.arguments.contains("--show-storage") ? .storage : .overview) }
         }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
     }
@@ -119,19 +123,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
         if CommandLine.arguments.contains("--show-storage") { showStorageMenu() }
-        else { status.button?.performClick(nil) }
+        else { openDashboard(page: dashboard.page) }
         return true
     }
 
     @objc private func toggleDashboard() {
         if popover.isShown { popover.performClose(nil) }
-        else { showDashboard(storage: false) }
+        else { showPopover() }
     }
 
-    private func showDashboard(storage: Bool) {
+    private func showPopover() {
         guard let button = status.button else { return }
-        if storage { dashboard.page = .storage }
-        else { dashboard.page = .overview }
         if !popover.isShown {
             NSApp.activate(ignoringOtherApps: true)
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
@@ -139,14 +141,64 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         self.storage?.checkDisk()
     }
 
-    func popoverDidShow(_ notification: Notification) { dashboard.begin() }
+    func popoverDidShow(_ notification: Notification) { dashboard.setPresented(.popover, true) }
 
-    func popoverDidClose(_ notification: Notification) { dashboard.end() }
+    func popoverDidClose(_ notification: Notification) { dashboard.setPresented(.popover, false) }
 
-    private func showStorageMenu() { showDashboard(storage: true) }
+    private func showStorageMenu() { openDashboard(page: .storage) }
+
+    private func openDashboard(page: DashboardPage, order: ProcessOrder? = nil) {
+        if let order { dashboard.order = order }
+        dashboard.page = page
+        if dashboardWindow == nil {
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: RetroLayout.dashboardSize),
+                                  styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                                  backing: .buffered, defer: false)
+            window.title = "RetroStats"
+            window.titleVisibility = .hidden
+            window.titlebarAppearsTransparent = true
+            window.isReleasedWhenClosed = false
+            window.contentMinSize = RetroLayout.dashboardMinimum
+            window.contentViewController = DashboardSurfaceController(model: dashboard)
+            window.delegate = self
+            window.center()
+            window.setFrameAutosaveName("RetroStatsDashboard")
+            dashboardWindow = window
+        }
+        // Register the destination before closing the source so sampling stays live.
+        dashboard.setPresented(.window, true)
+        dashboard.refreshContext()
+        NSApp.activate(ignoringOtherApps: true)
+        dashboardWindow?.deminiaturize(nil)
+        dashboardWindow?.makeKeyAndOrderFront(nil)
+        popover.performClose(nil)
+        storage?.checkDisk()
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow, window === dashboardWindow else { return }
+        dashboard.setPresented(.window, false)
+    }
+
+    private func installMainMenu() {
+        let menu = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit RetroStats", action: #selector(quitApp), keyEquivalent: "q").target = self
+        appItem.submenu = appMenu
+        menu.addItem(appItem)
+        let windowItem = NSMenuItem()
+        let windowMenu = NSMenu(title: "Window")
+        windowMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        windowItem.submenu = windowMenu
+        menu.addItem(windowItem)
+        NSApp.mainMenu = menu
+        NSApp.windowsMenu = windowMenu
+    }
 
     @objc private func didWake() {
-        if popover.isShown { dashboard.begin() }
+        dashboard.resumeIfPresented()
         previousCPU = cpuTicks()
         previousNetwork = networkCounters()
         previousTime = ProcessInfo.processInfo.systemUptime

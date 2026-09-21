@@ -3,17 +3,17 @@ import SwiftUI
 // MARK: - Pixel Button
 
 /// Retro bitmap button: 2px border, bitmap-rendered label, pressed state fills with a 2x2
-/// dither and nudges the label down-right. Variants match the LCD design tokens.
+/// dither and nudges the label down-right. All variants use the active finish.
 struct PixelButtonStyle: ButtonStyle {
     enum Variant { case `default`, primary, ghost }
     var variant: Variant = .default
 
     @Environment(\.isEnabled) private var isEnabled
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.retroPalette) private var palette
 
-    private var ink: Color { .primary }
-    private var screen: Color { scheme == .dark ? .black : .white }
+    private var ink: Color { palette.ink }
+    private var screen: Color { palette.paper }
 
     func makeBody(configuration: Configuration) -> some View {
         let pressed = configuration.isPressed
@@ -21,13 +21,15 @@ struct PixelButtonStyle: ButtonStyle {
         return configuration.label
             .foregroundStyle(variant == .primary ? screen : ink)
             .opacity(dim ? 0.4 : 1)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background {
                 if variant == .primary {
                     ink.opacity(dim ? 0.4 : 1)
                 } else if pressed {
                     DitherCell(color: ink).opacity(0.45)
+                } else if variant != .ghost {
+                    screen
                 }
             }
             .overlay {
@@ -38,10 +40,15 @@ struct PixelButtonStyle: ButtonStyle {
             .overlay {
                 if variant != .ghost {
                     RoundedRectangle(cornerRadius: 2, style: .continuous)
-                        .stroke(ink.opacity(dim ? 0.4 : 1), lineWidth: 2)
+                        .strokeBorder(ink.opacity(dim ? 0.4 : 1), lineWidth: 1)
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 2, style: .continuous))
+            .background {
+                if variant != .ghost && !pressed && !dim {
+                    RoundedRectangle(cornerRadius: 2).fill(ink).offset(x: 1, y: 1)
+                }
+            }
             .offset(pressed && !reduceMotion ? CGSize(width: 1, height: 1) : .zero)
     }
 }
@@ -58,10 +65,10 @@ extension ButtonStyle where Self == PixelButtonStyle {
 /// on, and a bitmap check mark assembled from 1-unit cells.
 struct PixelToggleStyle: ToggleStyle {
     @Environment(\.isEnabled) private var isEnabled
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.retroPalette) private var palette
 
-    private var ink: Color { .primary }
-    private var screen: Color { scheme == .dark ? .black : .white }
+    private var ink: Color { palette.ink }
+    private var screen: Color { palette.paper }
 
     func makeBody(configuration: Configuration) -> some View {
         let on = configuration.isOn
@@ -89,6 +96,7 @@ struct PixelToggleStyle: ToggleStyle {
         }
         .buttonStyle(.plain)
         .disabled(dim)
+        .accessibilityValue(on ? "On" : "Off")
     }
 }
 
@@ -104,6 +112,7 @@ struct PixelSegmentedControl<Value: Hashable>: View {
     let title: String
     let options: [(value: Value, label: String)]
     @Binding var selection: Value
+    @Environment(\.retroPalette) private var palette
 
     var body: some View {
         HStack(spacing: 2) {
@@ -120,15 +129,14 @@ struct PixelSegmentedControl<Value: Hashable>: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .foregroundStyle(selected ? Color.white : Color.primary)
-                .background(selected ? Color.accentColor : Color.clear,
-                            in: RoundedRectangle(cornerRadius: 5, style: .continuous))
+                .foregroundStyle(selected ? palette.paper : palette.ink)
+                .background(selected ? palette.ink : palette.paper)
                 .accessibilityAddTraits(selected ? [.isSelected] : [])
             }
         }
         .padding(2)
-        .background(Color(.controlBackgroundColor),
-                    in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+        .background(palette.paper)
+        .overlay(Rectangle().strokeBorder(palette.line, lineWidth: 1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(title)
     }

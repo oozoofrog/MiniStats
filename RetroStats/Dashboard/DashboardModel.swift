@@ -19,6 +19,9 @@ final class DashboardModel: ObservableObject {
     @Published var sampled = false
     @Published var loginEnabled = false
     @Published var loginApproval = false
+    @Published var finish: RetroFinish {
+        didSet { UserDefaults.standard.set(finish.rawValue, forKey: "retroFinish") }
+    }
     @Published var transitionStyle: TransitionStyle {
         didSet { UserDefaults.standard.set(transitionStyle.rawValue, forKey: Self.transitionStyleKey) }
     }
@@ -37,6 +40,7 @@ final class DashboardModel: ObservableObject {
     private let readProcesses: () -> [pid_t: ProcessSample]
     init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples) {
         self.readProcesses = readProcesses
+        self.finish = RetroFinish(rawValue: UserDefaults.standard.string(forKey: "retroFinish") ?? "") ?? .ivory
         self.transitionStyle = TransitionStyle(rawValue: UserDefaults.standard.string(forKey: Self.transitionStyleKey) ?? "") ?? .wave
         self.transitionSpeed = TransitionSpeed(rawValue: UserDefaults.standard.string(forKey: Self.transitionSpeedKey) ?? "") ?? .normal
     }
@@ -48,6 +52,20 @@ final class DashboardModel: ObservableObject {
     private var generation = 0
     private var active = false
     private var pendingGeneration: Int?
+    private var presentations: Set<DashboardPresentation> = []
+
+    /// Handoffs between the popover and window must not reset process sampling.
+    func setPresented(_ presentation: DashboardPresentation, _ visible: Bool) {
+        let wasPresented = !presentations.isEmpty
+        if visible { presentations.insert(presentation) }
+        else { presentations.remove(presentation) }
+        if !wasPresented && !presentations.isEmpty { begin() }
+        else if wasPresented && presentations.isEmpty { end() }
+    }
+
+    func resumeIfPresented() {
+        if !presentations.isEmpty { begin() }
+    }
 
     func begin() {
         generation += 1
@@ -107,4 +125,5 @@ final class DashboardModel: ObservableObject {
     }
 }
 
-enum DashboardPage { case overview, processes, storage, settings }
+enum DashboardPage { case overview, processes, network, storage, settings }
+enum DashboardPresentation { case popover, window }

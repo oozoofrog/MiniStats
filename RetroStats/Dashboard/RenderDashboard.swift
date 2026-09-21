@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// Content rendering for layout inspection; does not test window-server glass compositing or mouse interaction.
+/// Content rendering for layout inspection; does not test native window chrome or mouse interaction.
 /// Reads live metrics and the cached storage report without login registration, notifications, scans or deletion.
 @MainActor func renderDashboard(to directory: URL) throws {
     let app = NSApplication.shared
@@ -22,27 +22,26 @@ import SwiftUI
     model.sampled = true
     model.refreshContext()
     for (scheme, name) in [(ColorScheme.light, "light"), (.dark, "dark")] {
-        for (page, order, suffix) in [(DashboardPage.overview, ProcessOrder.cpu, "overview"), (.processes, .cpu, "cpu"), (.processes, .memory, "memory"), (.storage, .cpu, "storage"), (.settings, .cpu, "settings")] {
+        for (page, order, suffix) in [(DashboardPage.overview, ProcessOrder.cpu, "overview"), (.processes, .cpu, "cpu"), (.processes, .memory, "memory"), (.network, .cpu, "network"), (.storage, .cpu, "storage"), (.settings, .cpu, "settings")] {
             model.page = page
             model.order = order
-            let content = DashboardView(model: model, renderOnly: true).environment(\.colorScheme, scheme)
-                .background(
-                    LinearGradient(
-                        colors: scheme == .dark
-                            ? [Color(red: 0.11, green: 0.12, blue: 0.14), Color(red: 0.09, green: 0.10, blue: 0.12)]
-                            : [Color(red: 0.96, green: 0.97, blue: 0.98), Color(red: 0.93, green: 0.94, blue: 0.96)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                )
-            let renderer = ImageRenderer(content: content)
-            renderer.scale = 2
-            guard let cgImage = renderer.cgImage else { throw CocoaError(.fileWriteUnknown) }
-            let bitmap = NSBitmapImageRep(cgImage: cgImage)
-            guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
-            let target = directory.appendingPathComponent("\(name)-\(suffix).png")
-            try png.write(to: target)
-            print("Rendered content: \(target.path)")
+            let content = DashboardView(model: model, renderOnly: true)
+                .frame(width: RetroLayout.dashboardSize.width, height: page == .overview || page == .network ? 860 : 1040)
+                .environment(\.colorScheme, scheme)
+            try render(content, to: directory.appendingPathComponent("\(name)-\(suffix).png"))
         }
+        let popover = MenuPopoverView(model: model, renderOnly: true, openDashboard: { _, _ in })
+            .environment(\.colorScheme, scheme)
+        try render(popover, to: directory.appendingPathComponent("\(name)-popover.png"))
     }
+}
+
+@MainActor private func render<Content: View>(_ content: Content, to target: URL) throws {
+    let renderer = ImageRenderer(content: content)
+    renderer.scale = 2
+    guard let cgImage = renderer.cgImage else { throw CocoaError(.fileWriteUnknown) }
+    let bitmap = NSBitmapImageRep(cgImage: cgImage)
+    guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }
+    try png.write(to: target)
+    print("Rendered content: \(target.path)")
 }

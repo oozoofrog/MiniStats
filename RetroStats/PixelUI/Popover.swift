@@ -1,7 +1,7 @@
 import AppKit
 
-/// Borderless transient panel anchored below a status item. NSPopover draws its
-/// own opaque chrome, so the glass dashboard surface uses this panel instead.
+/// Borderless transient panel anchored below a status item. SwiftUI supplies
+/// the opaque classic frame and its hard offset shadow.
 final class TransparentPopover {
     private final class PopoverPanel: NSPanel {
         override var canBecomeKey: Bool { true }

@@ -20,12 +20,13 @@ curl -fsSL https://raw.githubusercontent.com/oozoofrog/MiniStats/main/scripts/in
 
 ## 주요 기능
 
-- **대시보드:** CPU·메모리 실시간 그래프와 네트워크·스토리지·배터리 상태
+- **메뉴바 팝오버:** CPU·메모리·다운로드·디스크 여유 공간을 빠르게 확인
+- **대시보드 창:** 사이드바로 CPU·메모리·네트워크·스토리지·설정 이동, 프로세스와 배터리 상태 확인
 - **프로세스:** CPU·메모리 상위 3개 미리보기와 상위 5개 상세 정보
 - **DerivedData 정리:** 오래된 캐시를 선택해 정리
 - **macOS 연동:** 로그인 시 자동 실행, 스토리지 알림, 활성 상태 보기·Finder 바로가기
 
-macOS 26 이상에서 네이티브 Liquid Glass(`NSGlassEffectView`)를 사용합니다.
+클래식 매킨토시에서 착안한 줄무늬 타이틀바와 불투명 패널, 픽셀 글꼴을 사용합니다. 설정에서 Ivory·Platinum·Phosphor 마감과 글자 크기를 선택할 수 있으며, 모든 마감은 macOS 밝은/어두운 모드를 따릅니다.
 
 ## 빌드와 실행
 
