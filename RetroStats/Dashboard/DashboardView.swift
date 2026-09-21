@@ -131,9 +131,9 @@ struct DashboardView: View {
                 }
                 LCDScreen {
                     VStack(alignment: .leading, spacing: 6) {
-                        HStack(alignment: .firstTextBaseline, spacing: 2) {
-                            Text(value.map { String(format: "%.0f", $0) } ?? "—").font(.bitmap(40)).foregroundStyle(.white)
-                            Text("%").font(.bitmap(16)).foregroundStyle(.white.opacity(0.6))
+                        HStack(alignment: .bottom, spacing: 3) {
+                            SegmentDigits(value: value.map { Int($0.rounded()) })
+                            Text("%").font(.bitmap(16)).foregroundStyle(.white.opacity(0.6)).padding(.bottom, 4)
                         }
                         HistoryLine(values: history, color: .white).frame(height: 30)
                     }
@@ -145,10 +145,14 @@ struct DashboardView: View {
                     Text(model.sampled && model.processes.isEmpty ? "No readable processes" : "Measuring…")
                         .font(.bitmap(10)).foregroundStyle(.secondary).frame(height: 54, alignment: .top)
                 } else {
+                    // Bars are relative to the top row so the leader always fills the bar.
+                    let top = rows.first.map { order == .cpu ? ($0.cpu ?? 0) : Double($0.memory) } ?? 0
                     ForEach(rows) { process in
-                        HStack(spacing: 4) {
+                        let amount = order == .cpu ? (process.cpu ?? 0) : Double(process.memory)
+                        HStack(spacing: 5) {
                             Text(process.name).lineLimit(1).truncationMode(.tail)
                             Spacer(minLength: 2)
+                            PixelBar(fraction: top > 0 ? amount / top : 0, color: ink)
                             Text(processValue(process, order: order)).foregroundStyle(.secondary).fixedSize()
                         }.font(.bitmap(10))
                     }
@@ -223,7 +227,7 @@ struct DashboardView: View {
                 cleanProgressSection(progress)
             } else {
                 if storage?.busy == true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.bitmap(11)).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle) }
-                if let error = storage?.lastError { Text(error).font(.bitmap(10)).foregroundStyle(.red).textSelection(.enabled) }
+                if let error = storage?.lastError { attentionText(error) }
                 if let report = storage?.report {
                     HStack {
                         Text("\(report.candidates.count) candidates · \(bytes(UInt64(report.candidateBytes)))")
@@ -308,7 +312,7 @@ struct DashboardView: View {
             HStack {
                 Text(progress.phase == .cancelled ? "Cleanup Cancelled" : "Cleanup Complete").font(.bitmap(14))
                 Spacer()
-                Image(systemName: progress.phase == .cancelled ? "minus.circle" : "checkmark.circle").foregroundStyle(progress.phase == .cancelled ? Color.secondary : Color.green)
+                Image(systemName: progress.phase == .cancelled ? "minus.circle" : "checkmark.circle").foregroundStyle(progress.phase == .cancelled ? Color.secondary : ink)
             }
             HStack(alignment: .firstTextBaseline) {
                 Text(bytes(UInt64(progress.freedBytes))).font(.bitmap(26))
@@ -329,11 +333,9 @@ struct DashboardView: View {
             HStack {
                 Text("Cleanup Failed").font(.bitmap(14))
                 Spacer()
-                Image(systemName: "exclamationmark.triangle").foregroundStyle(.red)
+                DitherCell(color: ink).frame(width: 14, height: 14)
             }
-            if let error = progress.error {
-                Text(error).font(.bitmap(10)).foregroundStyle(.red).textSelection(.enabled)
-            }
+            if let error = progress.error { attentionText(error) }
         }
     }
     @ViewBuilder
@@ -342,7 +344,7 @@ struct DashboardView: View {
         case .deleted: Image(systemName: "checkmark").foregroundStyle(.green).font(.system(size: 11))
         case .deleting: PixelHourglass(size: 11, color: ink)
         case .kept: Image(systemName: "minus").foregroundStyle(.secondary).font(.system(size: 11))
-        case .failed: Image(systemName: "xmark").foregroundStyle(.red).font(.system(size: 11))
+        case .failed: DitherCell(color: ink).frame(width: 11, height: 11)
         case .pending: Image(systemName: "circle").foregroundStyle(.secondary).font(.system(size: 11))
         }
     }
@@ -418,6 +420,13 @@ struct DashboardView: View {
             Divider()
             Button("Quit RetroStats") { model.quit?() }.disabled(storage?.cleaning == true)
         }.buttonStyle(.pixelGhost)
+    }
+    /// Error text: ink, not red, with a 50% dither edge as the attention mark.
+    private func attentionText(_ text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            DitherCell(color: ink).frame(width: 4)
+            Text(text).font(.bitmap(10)).textSelection(.enabled)
+        }.fixedSize(horizontal: false, vertical: true)
     }
     private func processValue(_ process: RankedProcess, order: ProcessOrder) -> String {
         order == .cpu ? process.cpu.map { String(format: "%.1f%%", $0) } ?? "—" : bytes(process.memory)

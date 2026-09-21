@@ -108,8 +108,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let warning = storage.disk?.warning == true
         status.length = warning ? 60 : 38
         warningIcon.isHidden = !warning
-        warningIcon.image = warning ? NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Storage usage at or above 50%")?.withSymbolConfiguration(.init(paletteColors: [.black, .systemOrange])) : nil
-        warningIcon.image?.isTemplate = false
+        warningIcon.image = warning ? NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Storage usage at or above 50%") : nil
+        warningIcon.image?.isTemplate = true
         let cpuLabel = dashboard.cpu.map { String(format: "CPU %.0f%%", $0.total) } ?? "CPU measuring…"
         let memoryLabel = dashboard.memory.map { "Memory \(bytes($0.used)) / \(bytes(totalMemory))" } ?? "Memory read failed"
         let diskLabel = storage.disk?.description ?? "Storage read failed"

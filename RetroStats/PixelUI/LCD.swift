@@ -136,3 +136,57 @@ final class SolidDashboardSurface: NSView {
         needsDisplay = true
     }
 }
+
+/// Seven-segment digits on a cell grid, with unlit segments left as a faint LCD ghost.
+/// `nil` shows a dash. Digits are 7 cells wide and 13 tall, strokes 2 cells thick.
+struct SegmentDigits: View {
+    let value: Int?
+    var cell: CGFloat = 3
+    var color: Color = .white
+
+    private static let lit: [Character: String] = [
+        "0": "abcdef", "1": "bc", "2": "abdeg", "3": "abcdg", "4": "bcfg",
+        "5": "acdfg", "6": "acdefg", "7": "abc", "8": "abcdefg", "9": "abcdfg", "-": "g",
+    ]
+    private static let rects: [(Character, CGRect)] = [
+        ("a", CGRect(x: 1, y: 0, width: 5, height: 2)), ("b", CGRect(x: 5, y: 1, width: 2, height: 5)),
+        ("c", CGRect(x: 5, y: 7, width: 2, height: 5)), ("d", CGRect(x: 1, y: 11, width: 5, height: 2)),
+        ("e", CGRect(x: 0, y: 7, width: 2, height: 5)), ("f", CGRect(x: 0, y: 1, width: 2, height: 5)),
+        ("g", CGRect(x: 1, y: 6, width: 5, height: 1)),
+    ]
+
+    private var text: String { value.map { String(min(max($0, 0), 999)) } ?? "-" }
+
+    var body: some View {
+        Canvas { ctx, _ in
+            for (index, character) in text.enumerated() {
+                let on = Self.lit[character] ?? ""
+                let x = CGFloat(index) * 8 * cell
+                for (segment, rect) in Self.rects {
+                    let r = CGRect(x: x + rect.minX * cell, y: rect.minY * cell, width: rect.width * cell, height: rect.height * cell)
+                    ctx.fill(Path(r), with: .color(color.opacity(on.contains(segment) ? 1 : 0.08)))
+                }
+            }
+        }
+        .frame(width: (CGFloat(text.count) * 8 - 1) * cell, height: 13 * cell)
+        .accessibilityLabel(value.map { "\($0) percent" } ?? "Measuring")
+    }
+}
+
+/// Twelve-cell bar. `fraction` 0…1 lights cells from the left; `attention` fills them with 50% dither.
+struct PixelBar: View {
+    let fraction: Double
+    var attention = false
+    var color: Color = .primary
+    var body: some View {
+        HStack(spacing: 1) {
+            ForEach(0..<12, id: \.self) { i in
+                let on = Double(i) < fraction * 12 - 0.001
+                if on && attention { DitherCell(color: color) }
+                else { Rectangle().fill(color.opacity(on ? 1 : 0.1)) }
+            }
+        }
+        .frame(width: 44, height: 8)
+        .accessibilityHidden(true)
+    }
+}
