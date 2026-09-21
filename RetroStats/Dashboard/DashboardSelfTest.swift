@@ -1,6 +1,12 @@
 import Foundation
 
 func dashboardSelfTest() {
+    precondition(LCDResponse.opacity(after: 0) == LCDResponse.strength)
+    precondition(LCDResponse.opacity(after: 0.1) > LCDResponse.opacity(after: 0.3))
+    precondition(LCDResponse.opacity(after: LCDResponse.duration) == 0)
+    precondition(LCDResponse.opacity(after: 3) == 0)
+    precondition(LCDResponse.opacity(after: .infinity) == 0 && LCDResponse.opacity(after: .nan) == 0)
+    print("PASS: LCD afterimage decay strength, monotonic fade and finite lifetime")
     let old = ProcessSample(name: "old", start: 1, cpuTime: 1_000_000_000, memory: 10)
     let current = ProcessSample(name: "busy", start: 1, cpuTime: 5_000_000_000, memory: 20)
     let reused = ProcessSample(name: "reused", start: 2, cpuTime: 9_000_000_000, memory: 40)

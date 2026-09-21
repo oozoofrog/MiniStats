@@ -9,7 +9,7 @@ extension DashboardContentView {
                     VStack(alignment: .leading, spacing: 14) {
                         RetroSectionHeading(title: disk.name.uppercased(), detail: bytes(disk.total))
                         HStack(alignment: .firstTextBaseline) {
-                            Text(bytes(disk.free)).font(.bitmap(32))
+                            LCDValue(text: bytes(disk.free)).font(.bitmap(32))
                             Text("free").font(.bitmap(12)).foregroundStyle(palette.muted)
                         }
                         RetroDiskMap(percent: disk.percent)

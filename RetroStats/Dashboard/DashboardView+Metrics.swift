@@ -136,7 +136,7 @@ extension DashboardContentView {
                 RetroSectionHeading(title: title, detail: "TRANSFER RATE")
                 HStack(spacing: 16) {
                     Image(systemName: icon).font(.system(size: 24)).accessibilityHidden(true)
-                    Text(value).font(.bitmap(compact ? 24 : 32))
+                    LCDValue(text: value).font(.bitmap(compact ? 24 : 32))
                     Spacer(minLength: 0)
                 }
             }
@@ -154,7 +154,7 @@ struct RetroProcessorPanel: View {
             VStack(alignment: .leading, spacing: compact ? 12 : 16) {
                 RetroSectionHeading(title: "PROCESSOR", detail: "CPU LOAD")
                 HStack(alignment: .bottom, spacing: 8) {
-                    Text(model.cpu.map { String(format: "%.0f", $0.total) } ?? "—")
+                    LCDValue(text: model.cpu.map { String(format: "%.0f", $0.total) } ?? "—")
                         .font(.bitmap(compact ? 40 : 48))
                     Text("%").font(.bitmap(18)).padding(.bottom, 4)
                     Spacer(minLength: 0)

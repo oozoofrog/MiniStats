@@ -66,20 +66,22 @@ struct HistoryLine: View {
     var height: CGFloat = 48
 
     var body: some View {
-        GeometryReader { geometry in
-            ZStack(alignment: .bottom) {
-                VStack {
-                    ForEach(0..<3) { _ in
-                        Rectangle().fill(color.opacity(0.12)).frame(height: 1)
-                        Spacer(minLength: 0)
+        LCDPersistence(value: values) { samples in
+            GeometryReader { geometry in
+                ZStack(alignment: .bottom) {
+                    VStack {
+                        ForEach(0..<3) { _ in
+                            Rectangle().fill(color.opacity(0.12)).frame(height: 1)
+                            Spacer(minLength: 0)
+                        }
                     }
-                }
-                HStack(alignment: .bottom, spacing: 3) {
-                    ForEach(0..<40, id: \.self) { index in
-                        let sample = index - (40 - values.count)
-                        let value = sample >= 0 && sample < values.count ? values[sample] : nil
-                        Rectangle().fill(color.opacity(value == nil ? 0 : 0.75))
-                            .frame(height: max(1, min(100, max(0, value ?? 0)) / 100 * geometry.size.height))
+                    HStack(alignment: .bottom, spacing: 3) {
+                        ForEach(0..<40, id: \.self) { index in
+                            let sample = index - (40 - samples.count)
+                            let value = sample >= 0 && sample < samples.count ? samples[sample] : nil
+                            Rectangle().fill(color.opacity(value == nil ? 0 : 0.75))
+                                .frame(height: max(1, min(100, max(0, value ?? 0)) / 100 * geometry.size.height))
+                        }
                     }
                 }
             }

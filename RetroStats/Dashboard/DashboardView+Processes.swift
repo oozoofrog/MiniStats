@@ -8,7 +8,7 @@ extension DashboardContentView {
                 VStack(alignment: .leading, spacing: 14) {
                     RetroSectionHeading(title: order == .cpu ? "CPU LOAD" : "MEMORY USED", detail: "RECENT SAMPLES")
                     HStack(alignment: .firstTextBaseline) {
-                        Text(order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
+                        LCDValue(text: order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
                             .font(.bitmap(32))
                         Text(order == .cpu ? "All cores" : "/ \(bytes(totalMemory))").font(.bitmap(12)).foregroundStyle(palette.muted)
                     }
