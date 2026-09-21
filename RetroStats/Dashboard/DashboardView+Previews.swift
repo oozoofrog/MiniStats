@@ -31,8 +31,7 @@ private func makeConfirmProgress() -> CleanProgress {
     let candidates = Array(sampleEntries.filter(\.candidate).prefix(3))
     return CleanProgress(
         phase: .confirming,
-        items: candidates.map { CleanProgress.Item(path: $0.path, size: $0.size) },
-        freedBytes: 0, cancelled: false, currentPath: nil, summary: nil, error: nil
+        items: candidates.map { CleanProgress.Item(path: $0.path, size: $0.size) }
     )
 }
 
@@ -46,8 +45,8 @@ private func makeRunningProgress() -> CleanProgress {
             .init(path: candidates[2].path, size: candidates[2].size, state: .pending),
             .init(path: candidates[3].path, size: candidates[3].size, state: .kept),
         ],
-        freedBytes: candidates[0].size, cancelled: false,
-        currentPath: candidates[1].path, summary: nil, error: nil
+        freedBytes: candidates[0].size,
+        currentPath: candidates[1].path, error: nil
     )
 }
 
@@ -57,7 +56,7 @@ private func makeDoneProgress() -> CleanProgress {
         phase: .done,
         items: candidates.map { .init(path: $0.path, size: $0.size, state: $0.size > 900_000_000 ? .deleted : .kept) },
         freedBytes: candidates.filter { $0.size > 900_000_000 }.reduce(Int64(0)) { $0 + $1.size },
-        cancelled: false, currentPath: nil, summary: nil, error: nil
+        currentPath: nil, error: nil
     )
 }
 
@@ -71,7 +70,7 @@ private func makeCancelledProgress() -> CleanProgress {
             .init(path: candidates[2].path, size: candidates[2].size, state: .pending),
             .init(path: candidates[3].path, size: candidates[3].size, state: .pending),
         ],
-        freedBytes: candidates[0].size, cancelled: true, currentPath: nil, summary: nil, error: nil
+        freedBytes: candidates[0].size, currentPath: nil, error: nil
     )
 }
 
@@ -84,8 +83,8 @@ private func makeFailedProgress() -> CleanProgress {
             .init(path: candidates[1].path, size: candidates[1].size, state: .failed),
             .init(path: candidates[2].path, size: candidates[2].size, state: .pending),
         ],
-        freedBytes: candidates[0].size, cancelled: false, currentPath: nil,
-        summary: nil, error: "Some items could not be deleted: operation not permitted (OS error -1)"
+        freedBytes: candidates[0].size, currentPath: nil,
+        error: "Some items could not be deleted: operation not permitted (OS error -1)"
     )
 }
 

@@ -29,7 +29,7 @@ macOS 26 이상에서 네이티브 Liquid Glass(`NSGlassEffectView`)를 사용�
 
 ## 빌드와 실행
 
-- 실행: Apple Silicon, macOS 26 이상, `/usr/bin/python3`
+- 실행: Apple Silicon, macOS 26 이상
 - 빌드: macOS 26 SDK 이상을 포함한 Xcode
 
 ```sh

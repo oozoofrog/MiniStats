@@ -29,14 +29,34 @@ func processSamples() -> [pid_t: ProcessSample] {
     return result
 }
 
-func topCPU(_ before: [pid_t: ProcessSample], _ after: [pid_t: ProcessSample], seconds: Double) -> [(name: String, percent: Double)] {
-    guard seconds > 0 else { return [] }
-    return after.compactMap { pid, current -> (name: String, percent: Double)? in
-        guard let old = before[pid], old.start == current.start, current.cpuTime >= old.cpuTime else { return nil }
-        return (current.name, 100 * Double(current.cpuTime - old.cpuTime) / 1e9 / seconds)
-    }.sorted { $0.percent > $1.percent }.prefix(5).map { $0 }
+struct RankedProcess: Identifiable {
+    let pid: pid_t
+    let start: UInt64
+    let name: String
+    let cpu: Double?
+    let memory: UInt64
+    var id: String { "\(pid):\(start)" }
 }
 
-func topMemory(_ samples: [pid_t: ProcessSample]) -> [(name: String, memory: UInt64)] {
-    samples.values.sorted { $0.memory > $1.memory }.prefix(5).map { ($0.name, $0.memory) }
+func rankedProcesses(before: [pid_t: ProcessSample], after: [pid_t: ProcessSample], seconds: Double) -> [RankedProcess] {
+    after.map { pid, sample in
+        var cpu: Double?
+        if seconds.isFinite, seconds >= 1, let old = before[pid], old.start == sample.start, sample.cpuTime >= old.cpuTime {
+            cpu = 100 * Double(sample.cpuTime - old.cpuTime) / 1e9 / seconds
+        }
+        return RankedProcess(pid: pid, start: sample.start, name: sample.name, cpu: cpu, memory: sample.memory)
+    }
+}
+
+enum ProcessOrder: String, CaseIterable, Identifiable {
+    case cpu = "CPU", memory = "Memory"
+    var id: String { rawValue }
+    func sorted(_ processes: [RankedProcess]) -> [RankedProcess] {
+        let eligible = self == .cpu ? processes.filter { $0.cpu != nil } : processes
+        return eligible.sorted {
+            let lhs = self == .cpu ? ($0.cpu ?? 0) : Double($0.memory)
+            let rhs = self == .cpu ? ($1.cpu ?? 0) : Double($1.memory)
+            return lhs == rhs ? $0.pid < $1.pid : lhs > rhs
+        }
+    }
 }

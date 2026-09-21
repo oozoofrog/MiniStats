@@ -165,7 +165,7 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | 컴포넌트 | 역할 |
 | --- | --- |
 | `PageTransition` | 프로토콜. 이전·새 페이지의 마스크(`oldPageMask`/`newPageMask`)와 효과 오버레이를 `AnyView`로 반환 |
-| `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(seed:color:duration:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
+| `TransitionStyle` | `wave`/`fade`/`flip` enum. `makeTransition(color:duration:)`로 구체 트랜지션 생성. UserDefaults(`transitionStyle` 키)로 영속 |
 | `TransitionSpeed` | `slow`/`normal`/`fast` enum. `duration`으로 1.0/0.5/0.25초 매핑. UserDefaults(`transitionSpeed` 키)로 영속 |
 | `WaveTransition` | 파도 위프 트랜지션 (`PixelWaveMaskShape` + `PixelTransition` 밴드 오버레이) |
 | `FadeTransition` | 8pt 블록 Bayer 디더 마스크로 이전/새 페이지를 상보적으로 교체. 화면에는 Dissolve로 표시 |
@@ -212,12 +212,12 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 
 | 컴포넌트 | 파일 | 설명 |
 | --- | --- | --- |
-| `LCDScreen` | LCDScreen.swift | 어두운 배경 + 흰 텍스트 LCD 화면 컨테이너 |
-| `LCDPanelBackground` | LCDPanelBackground.swift |lcdPanel 모디파이어 (패널 배경) |
-| `UsageBar` | UsageBar.swift | 사용률 바 (디스크, 정리 진행) |
-| `HistoryLine` | HistoryLine.swift | 히스토리 그래프 (CPU/메모리) |
+| `LCDScreen` | LCD.swift | 어두운 배경 + 흰 텍스트 LCD 화면 컨테이너 |
+| `LCDPanelBackground` | LCD.swift |lcdPanel 모디파이어 (패널 배경) |
+| `UsageBar` | LCD.swift | 사용률 바 (디스크, 정리 진행) |
+| `HistoryLine` | LCD.swift | 히스토리 그래프 (CPU/메모리) |
 | `PixelButtonStyle` | PixelControls.swift | `.pixel` / `.pixelPrimary` / `.pixelGhost` 버튼 스타일 |
 | `PixelToggleStyle` | PixelControls.swift | `.pixelToggle` 토글 스타일 |
 | `TransparentPopover` | Popover.swift | 메뉴바 투명 팝오버 |
 | `DashboardSurfaceController` | DashboardSurfaceController.swift | NSViewController 래퍼 |
-| `StatusReadout` | StatusReadout.swift | 메뉴바 아이콘 + 텍스트 표시 |
+| `StatusReadout` | AppDelegate.swift | 메뉴바 아이콘 + 텍스트 표시 |

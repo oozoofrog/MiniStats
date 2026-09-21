@@ -102,8 +102,6 @@ func transitionSelfTest() {
     precondition(FlipTransition.flapScale(progress: 1) == 1)
     precondition(FlipTransition.flapScale(progress: -1) == 1)
     precondition(FlipTransition.flapScale(progress: 2) == 1)
-    precondition(FlipTransition.showsOldFlap(progress: 0.49))
-    precondition(!FlipTransition.showsOldFlap(progress: 0.5))
     let flipCells = (0..<6).flatMap { row in (0..<6).map { (row, $0) } }
     let delays = flipCells.map { FlipTransition.startDelay(row: $0.0, column: $0.1, seed: 7) }
     precondition(Set(delays).count == flipCells.count, "Pixels should have distinct start times")
@@ -162,7 +160,7 @@ func transitionSelfTest() {
         precondition(TransitionStyle(rawValue: defaults.string(forKey: key) ?? "") == style, "Style \(style) should round-trip")
     }
     precondition(TransitionStyle(rawValue: "nope") == nil, "Unknown transition style raw value should not resolve")
-    let typeNames = Set(TransitionStyle.allCases.map { String(describing: type(of: $0.makeTransition(seed: 0, color: .primary, duration: 0.5))) })
+    let typeNames = Set(TransitionStyle.allCases.map { String(describing: type(of: $0.makeTransition(color: .primary, duration: 0.5))) })
     precondition(typeNames.count == TransitionStyle.allCases.count, "Each style should produce a distinct transition type, got \(typeNames)")
     defaults.removeObject(forKey: key)
 
@@ -184,7 +182,7 @@ func transitionSelfTest() {
     precondition(TransitionSpeed.normal.duration > TransitionSpeed.fast.duration, "Normal duration should be longer than fast")
     precondition(TransitionSpeed.slow.duration == 1.0 && TransitionSpeed.normal.duration == 0.5 && TransitionSpeed.fast.duration == 0.25)
     for speed in TransitionSpeed.allCases {
-        let t = TransitionStyle.wave.makeTransition(seed: 0, color: .primary, duration: speed.duration)
+        let t = TransitionStyle.wave.makeTransition(color: .primary, duration: speed.duration)
         precondition(t.duration == speed.duration, "Transition duration should match speed \(speed) (\(speed.duration)), got \(t.duration)")
     }
     defaults.removeObject(forKey: speedKey)

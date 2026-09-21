@@ -2,7 +2,6 @@ import AppKit
 import UserNotifications
 
 final class StorageController: NSObject, UNUserNotificationCenterDelegate {
-    let menuItem = NSMenuItem(title: "Storage Cleanup", action: nil, keyEquivalent: "")
     private(set) var disk: DiskUsage?
     private(set) var cleaning = false
     private(set) var report: CacheReport?
@@ -13,12 +12,10 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
     #endif
     private(set) var lastError: String?
     private(set) var cleanProgress: CleanProgress?
-    @Published private(set) var scanPath: String?
+    private(set) var scanPath: String?
     private var timer: Timer?
     private var lastScan = Date.distantPast
     private var sendingNotification = false
-    private var notificationsAllowed = false
-    private var notificationError: String?
     private let defaults = UserDefaults.standard
     private let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/RetroStats")
     private let changed: () -> Void
@@ -32,9 +29,6 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         self.changed = changed
         self.openMenu = openMenu
         super.init()
-        if startServices, defaults.object(forKey: "includeShared") == nil {
-            defaults.set(UserDefaults(suiteName: "local.jaychoi.deriveddata-menu")?.bool(forKey: "includeShared") ?? false, forKey: "includeShared")
-        }
         if let data = try? Data(contentsOf: support.appendingPathComponent("report.json")) {
             report = try? CacheReport.decode(data)
         }
@@ -47,12 +41,8 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         }
         let action = UNNotificationAction(identifier: "open-storage", title: "Storage Cleanup", options: .foreground)
         center.setNotificationCategories([UNNotificationCategory(identifier: "storage", actions: [action], intentIdentifiers: [], options: [])])
-        center.requestAuthorization(options: [.alert]) { allowed, error in
-            DispatchQueue.main.async {
-                self.notificationsAllowed = allowed
-                self.notificationError = error?.localizedDescription
-                self.checkDisk()
-            }
+        center.requestAuthorization(options: [.alert]) { _, _ in
+            DispatchQueue.main.async { self.checkDisk() }
         }
         checkDisk()
         refresh()
@@ -77,7 +67,6 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 sendWarning(disk)
             }
         }
-        rebuildMenu()
         changed()
     }
 
@@ -87,10 +76,8 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         let center = UNUserNotificationCenter.current()
         center.getNotificationSettings { settings in
             DispatchQueue.main.async {
-                self.notificationsAllowed = settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional
-                guard self.notificationsAllowed else {
+                guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
                     self.sendingNotification = false
-                    self.rebuildMenu()
                     return
                 }
                 let content = UNMutableNotificationContent()
@@ -100,12 +87,10 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 center.add(UNNotificationRequest(identifier: self.notificationID, content: content, trigger: nil)) { error in
                     DispatchQueue.main.async {
                         self.sendingNotification = false
-                        self.notificationError = error?.localizedDescription
                         if error == nil {
                             if self.preview { self.previewNotified = true }
                             else { self.defaults.set(true, forKey: "storageAlertSent") }
                         }
-                        self.rebuildMenu()
                     }
                 }
             }
@@ -121,102 +106,33 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         completionHandler()
     }
 
-    private func rebuildMenu() {
-        menuItem.title = disk?.warning == true ? "⚠︎ Storage Cleanup · 50%+ used" : "Storage Cleanup"
-        let menu = menuItem.submenu ?? NSMenu()
-        menu.removeAllItems()
-        menu.autoenablesItems = false
-        func add(_ title: String, _ action: Selector? = nil, enabled: Bool = true) -> NSMenuItem {
-            let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
-            item.target = self
-            item.isEnabled = enabled && action != nil
-            menu.addItem(item)
-            return item
-        }
-        _ = add(disk?.description ?? "Storage: read failed")
-        if preview { _ = add("Test: show disk usage as 55% only") }
-        if disk?.warning == true { _ = add("⚠︎ 50%+ used — review cleanup candidates") }
-        menu.addItem(.separator())
-        _ = add("DerivedData")
-        if busy { _ = add(cleaning ? "Cleaning…" : "Checking capacity…") }
-        if let report {
-            _ = add("\(report.items.count) total items · \(bytes(UInt64(report.totalBytes)))")
-            _ = add("\(report.candidates.count) cleanup candidates older than 8 hours · \(bytes(UInt64(report.candidateBytes)))")
-            _ = add("Last checked: " + englishDateTime(Date(timeIntervalSince1970: report.generatedAt)))
-            let projects = add("Project sizes · Reveal in Finder")
-            projects.isEnabled = true
-            let submenu = NSMenu()
-            submenu.autoenablesItems = false
-            for entry in report.items {
-                let name = URL(fileURLWithPath: entry.path).lastPathComponent
-                let item = NSMenuItem(title: "\(entry.candidate ? "● " : "")\(bytes(UInt64(entry.size)))  \(name)", action: #selector(revealCache(_:)), keyEquivalent: "")
-                item.target = self
-                item.representedObject = entry.path
-                item.toolTip = entry.path + (entry.workspace.isEmpty ? "" : "\nProject: " + entry.workspace)
-                submenu.addItem(item)
-            }
-            projects.submenu = submenu
-        }
-        if let lastError { _ = add("Scan/cleanup error — Show details…", #selector(showError)).toolTip = lastError }
-        menu.addItem(.separator())
-        _ = add("Check now", #selector(refresh), enabled: !busy)
-        _ = add("Clean DerivedData older than 8 hours…", #selector(confirmAllClean), enabled: !busy && lastError == nil && !(report?.candidates.isEmpty ?? true))
-        let shared = add("Include shared caches", #selector(toggleShared), enabled: !busy)
-        shared.state = includeShared ? .on : .off
-        _ = add("Open DerivedData folder", #selector(openFolder))
-        menu.addItem(.separator())
-        _ = add("Disk check: 1 min · DerivedData scan: 1 hour")
-        _ = add("Cleanup is manual · Quit Xcode first")
-        _ = add(notificationsAllowed ? "Cleanup alerts…" : "Cleanup alerts off — Enable…", #selector(openNotificationSettings))
-        if let notificationError { _ = add("Notification error: " + notificationError) }
-        menuItem.submenu = menu
-    }
-
-    @objc func openNotificationSettings() {
+    func openNotificationSettings() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension?id=local.jay.RetroStats")!)
     }
 
-    @objc func refresh() {
+    func refresh() {
         guard !busy else { return }
         lastScan = Date()
         run(clean: false)
     }
 
-    @objc func toggleShared() {
+    func toggleShared() {
         guard !busy else { return }
         defaults.set(!includeShared, forKey: "includeShared")
         report = nil
         refresh()
     }
 
-    @objc private func revealCache(_ sender: NSMenuItem) {
-        guard let path = sender.representedObject as? String else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: path)])
-    }
-
-    @objc func openFolder() {
+    func openFolder() {
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer/Xcode/DerivedData"))
     }
 
-    @objc private func showError() { alert("DerivedData operation failed", lastError ?? "No error details are available.") }
-
-    @objc private func confirmAllClean() {
-        guard beginClean(paths: Set(report?.candidates.map(\.path) ?? [])) else { return }
-        openMenu()
-    }
-
-    @discardableResult
-    func beginClean(paths: Set<String>) -> Bool {
-        guard !busy, lastError == nil, let report, !paths.isEmpty else { return false }
+    func beginClean(paths: Set<String>) {
+        guard !busy, lastError == nil, let report, !paths.isEmpty else { return }
         let entries = report.candidates.filter { paths.contains($0.path) }
-        guard Set(entries.map(\.path)) == paths else { return false }
-        cleanProgress = CleanProgress(
-            phase: .confirming,
-            items: entries.map { CleanProgress.Item(path: $0.path, size: $0.size) },
-            freedBytes: 0, cancelled: false, currentPath: nil, summary: nil, error: nil
-        )
+        guard Set(entries.map(\.path)) == paths else { return }
+        cleanProgress = CleanProgress(phase: .confirming, items: entries.map { CleanProgress.Item(path: $0.path, size: $0.size) })
         changed()
-        return true
     }
 
     func confirmCleanRun() {
@@ -229,7 +145,6 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
             cleanProgress = nil
             changed()
         } else if cleanProgress?.phase == .running {
-            cleanProgress?.cancelled = true
             task?.cancel()
         }
     }
@@ -249,9 +164,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         lastError = nil
         if clean, var progress = cleanProgress {
             progress.phase = .running
-            progress.cancelled = false
             progress.freedBytes = 0
-            progress.summary = nil
             progress.error = nil
             for i in progress.items.indices { progress.items[i].state = .pending }
             if let firstIdx = progress.items.firstIndex(where: { $0.state == .pending }) {
@@ -260,7 +173,6 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
             }
             cleanProgress = progress
         }
-        rebuildMenu()
         changed()
         let cleaner = DerivedDataCleaner()
         let includeShared = self.includeShared
@@ -273,7 +185,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                         DispatchQueue.main.async { self?.applyCleanEvent(event) }
                     }
                 } else {
-                    let report = try await cleaner.scanReport(hours: 8, includeShared: includeShared) { path in
+                    let report = try await cleaner.scan(roots: cleaner.defaultRoots(), hours: 8, includeShared: includeShared) { path in
                         DispatchQueue.main.async { self.scanPath = path }
                     }
                     let data = try CacheReport.encode(report)
@@ -308,7 +220,6 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 progress.items[idx].state = .kept
             }
         case .done(let removed, let freedBytes):
-            progress.summary = "Cleanup complete: \(removed) items, allocated space freed \(bytes(UInt64(freedBytes)))"
             progress.phase = .done
             progress.currentPath = nil
             let log = progress.items.map { item -> String in
@@ -317,7 +228,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
                 case .kept: return "Kept (changed after scan): \(item.path)"
                 default: return "\(item.path)"
                 }
-            }.joined(separator: "\n") + "\n" + (progress.summary ?? "")
+            }.joined(separator: "\n") + "\nCleanup complete: \(removed) items, allocated space freed \(bytes(UInt64(freedBytes)))"
             try? log.write(to: support.appendingPathComponent("last-cleanup.txt"), atomically: true, encoding: .utf8)
             cleanProgress = progress
             report = nil
@@ -365,17 +276,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate {
         cleaning = false
         scanPath = nil
         task = nil
-        rebuildMenu()
         changed()
-    }
-
-    private func alert(_ title: String, _ message: String) {
-        NSApp.activate(ignoringOtherApps: true)
-        let dialog = NSAlert()
-        dialog.messageText = title
-        dialog.informativeText = message
-        dialog.addButton(withTitle: "OK")
-        dialog.runModal()
     }
 
     func stop() {

@@ -1,10 +1,6 @@
 import SwiftUI
 
-/// Common 16x16 pixel grid helpers for bitmap icons.
-
-private struct PixelGrid {
-    static let n: CGFloat = 16
-}
+private let gridSize: CGFloat = 16
 
 /// Filled cells on a 16x16 grid, scaled to the requested size.
 private struct PixelCells: View {
@@ -14,7 +10,7 @@ private struct PixelCells: View {
 
     var body: some View {
         Canvas { ctx, sz in
-            let s = sz.width / PixelGrid.n
+            let s = sz.width / gridSize
             var path = Path()
             for (i, j) in cells {
                 path.addRect(CGRect(x: CGFloat(i) * s, y: CGFloat(j) * s, width: s, height: s))
@@ -114,8 +110,8 @@ struct PixelRefresh: View {
         let cx = 7.5, cy = 7.5, rIn = 4.5, rOut = 6.5
         let a0 = 270.0 * .pi / 180, a1 = 570.0 * .pi / 180
         var keyed: [(Double, Int, Int)] = []
-        for j in 0..<Int(PixelGrid.n) {
-            for i in 0..<Int(PixelGrid.n) {
+        for j in 0..<Int(gridSize) {
+            for i in 0..<Int(gridSize) {
                 let dx = Double(i) - cx, dy = Double(j) - cy
                 let r = (dx * dx + dy * dy).squareRoot()
                 guard r >= rIn, r <= rOut else { continue }

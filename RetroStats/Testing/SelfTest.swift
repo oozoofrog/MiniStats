@@ -118,10 +118,10 @@ func selfTest() {
     let busy = ProcessSample(name: "idle", start: 1, cpuTime: 1_500_000_000, memory: 10)
     let old = ProcessSample(name: "old", start: 2, cpuTime: 100, memory: 20)
     let reused = ProcessSample(name: "new", start: 3, cpuTime: 5_000_000_000, memory: 5)
-    let ranked = topCPU([1: idle, 2: old], [1: busy, 2: reused], seconds: 3)
-    precondition(ranked.count == 1 && ranked[0].name == "idle" && ranked[0].percent == 50)
-    precondition(topCPU([1: idle], [1: busy], seconds: 0).isEmpty)
-    precondition(topMemory([1: busy, 2: reused]).map(\.name) == ["idle", "new"])
+    let ranked = ProcessOrder.cpu.sorted(rankedProcesses(before: [1: idle, 2: old], after: [1: busy, 2: reused], seconds: 3))
+    precondition(ranked.count == 1 && ranked[0].name == "idle" && ranked[0].cpu == 50)
+    precondition(ProcessOrder.cpu.sorted(rankedProcesses(before: [1: idle], after: [1: busy], seconds: 0)).isEmpty)
+    precondition(ProcessOrder.memory.sorted(rankedProcesses(before: [:], after: [1: busy, 2: reused], seconds: 0)).map(\.name) == ["idle", "new"])
     let processes = processSamples()
     precondition((processes[getpid()]?.memory ?? 0) > 0)
     precondition(sysctlValue("vm.swapusage", xsw_usage()) != nil)
@@ -146,9 +146,9 @@ func selfTest() {
     let ticks = cpuTicks()!
     Thread.sleep(forTimeInterval: 3)
     guard let cpu = cpuLoad(ticks, cpuTicks()!), (0...100).contains(cpu.total) else { fatalError("Live CPU delta failed") }
-    let live = topCPU(processes, processSamples(), seconds: 3)
-    precondition(live.allSatisfy { $0.percent >= 0 && $0.percent <= 100 * Double(ProcessInfo.processInfo.activeProcessorCount) })
+    let live = ProcessOrder.cpu.sorted(rankedProcesses(before: processes, after: processSamples(), seconds: 3)).prefix(5)
+    precondition(live.allSatisfy { ($0.cpu ?? 0) >= 0 && ($0.cpu ?? 0) <= 100 * Double(ProcessInfo.processInfo.activeProcessorCount) })
     print("PASS: bitmap font registration/fixed width, shader bundle, CPU math/wraparound, memory bounds, network parser/rates/reset/64-bit counters, process ranking/pid reuse, sysctl reads, formatting, live sampling")
     print("CPU \(String(format: "%.1f", cpu.total))% · Memory \(bytes(memory.used))/\(bytes(totalMemory)) · \(swapText()) · \(memoryPressureText()) · \(loadAverageText()) · Interfaces \(network.keys.sorted()) · \(batteryText())")
-    print("Processes \(processes.count) · top CPU \(live.map { "\($0.name) \(String(format: "%.1f", $0.percent))%" }) · top memory \(topMemory(processes).map { "\($0.name) \(bytes($0.memory))" })")
+    print("Processes \(processes.count) · top CPU \(live.map { "\($0.name) \(String(format: "%.1f", $0.cpu ?? 0))%" })")
 }

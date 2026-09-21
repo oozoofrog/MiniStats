@@ -36,18 +36,10 @@ struct DerivedDataCleaner {
 
     // MARK: - Public API
 
-    /// Scan default DerivedData roots and return a report. Throws on the first
-    /// cache that cannot be inspected (e.g. cross-device, broken info.plist),
-    /// matching the former Python behavior where one bad cache aborts the scan.
-    /// `scanning` is invoked with each path as it begins inspection.
-    func scanReport(hours: Int, includeShared: Bool,
-                    scanning: ((String) -> Void)? = nil) async throws -> CacheReport {
-        try await scan(roots: defaultRoots(), hours: hours, includeShared: includeShared, scanning: scanning)
-    }
-
     /// Scan the given roots (each a DerivedData parent folder or a single cache)
-    /// and return a report. `scanning` is invoked with each path as it begins
-    /// inspection, so callers can show live progress.
+    /// and return a report. Throws on the first cache that cannot be inspected
+    /// (cross-device, broken info.plist). `scanning` is invoked with each path
+    /// as it begins inspection, so callers can show live progress.
     func scan(roots: [String], hours: Int, includeShared: Bool,
               scanning: ((String) -> Void)? = nil) async throws -> CacheReport {
         let now = Date().timeIntervalSince1970
@@ -179,14 +171,8 @@ struct DerivedDataCleaner {
         return dict
     }
 
-    private static let projectRegex: NSRegularExpression = {
-        // .+-[a-z]{28} (full match), matching the Python regex_fullmatch
-        try! NSRegularExpression(pattern: "^.+-[a-z]{28}$", options: [])
-    }()
-
     private func isProjectCacheName(_ name: String, path: String) -> Bool {
-        let range = NSRange(name.startIndex..<name.endIndex, in: name)
-        guard Self.projectRegex.firstMatch(in: name, options: [], range: range) != nil else { return false }
+        guard name.wholeMatch(of: /.+-[a-z]{28}/) != nil else { return false }
         for sub in ["Build", "Logs", "Index.noindex", "SourcePackages"] {
             var st = stat()
             let p = (path as NSString).appendingPathComponent(sub)
@@ -278,29 +264,9 @@ struct DerivedDataCleaner {
     // MARK: - Clean guards
 
     static func ensureIdle() throws {
-        // proc_listpids/proc_pidpath flavor constants (libproc.h macros not
-        // exposed to Swift): PROC_ALL_PIDS = 1, buffer = PROC_PIDPATHINFO_MAXSIZE.
-        let allPids: UInt32 = 1
-        let pathBufSize = 4096
-        let needed = proc_listpids(allPids, 0, nil, 0)
-        guard needed > 0 else { return }
-        var buffer = [pid_t](repeating: 0, count: Int(needed) / MemoryLayout<pid_t>.size)
-        let written = proc_listpids(allPids, 0, &buffer, needed)
-        let count = max(0, Int(written) / MemoryLayout<pid_t>.size)
-        var active = Set<String>()
-        for i in 0..<count {
-            let pid = buffer[i]
-            guard pid != 0 else { continue }
-            var cpath = [CChar](repeating: 0, count: pathBufSize)
-            let len = proc_pidpath(pid, &cpath, UInt32(pathBufSize))
-            if len > 0 {
-                let name = (String(cString: cpath) as NSString).lastPathComponent
-                if name == "Xcode" || name == "xcodebuild" { active.insert(name) }
-            }
-        }
-        if !active.isEmpty {
-            throw CleanerError.xcodeRunning(active.sorted().joined(separator: ", "))
-        }
+        // ponytail: sees only this user's processes; Xcode run by another account is not detected.
+        let active = Set(processSamples().values.map(\.name)).intersection(["Xcode", "xcodebuild"])
+        if !active.isEmpty { throw CleanerError.xcodeRunning(active.sorted().joined(separator: ", ")) }
     }
 
     private func verifySafeDeletePath(_ path: String) throws {

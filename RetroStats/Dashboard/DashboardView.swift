@@ -13,7 +13,7 @@ struct DashboardView: View {
     private var candidatePaths: [String] { storage?.report?.candidates.map(\.path) ?? [] }
     var body: some View {
         TransitionContainer(
-            transition: model.transitionStyle.makeTransition(seed: 0, color: ink, duration: model.transitionSpeed.duration),
+            transition: model.transitionStyle.makeTransition(color: ink, duration: model.transitionSpeed.duration),
             currentPage: model.page
         ) { page in
             dashboardPanel(for: page)
@@ -69,9 +69,6 @@ struct DashboardView: View {
         case .storage: return "Storage Cleanup"
         case .settings: return "Settings"
         }
-    }
-    private var pageContents: some View {
-        pageContents(for: model.page)
     }
     private func pageContents(for page: DashboardPage) -> some View {
         VStack(alignment: .leading, spacing: 19) {
@@ -281,7 +278,7 @@ struct DashboardView: View {
             HStack {
                 Text("Cleanup Progress").font(.bitmap(14))
                 Spacer()
-                ProgressView().controlSize(.small)
+                PixelHourglass(size: 14, color: ink)
             }
             HStack {
                 Text("\(progress.resolvedCount) / \(progress.totalCount) items").font(.bitmap(13))
@@ -342,7 +339,7 @@ struct DashboardView: View {
     private func cleanItemIcon(_ state: CleanProgress.ItemState) -> some View {
         switch state {
         case .deleted: Image(systemName: "checkmark").foregroundStyle(.green).font(.system(size: 11))
-        case .deleting: ProgressView().controlSize(.mini)
+        case .deleting: PixelHourglass(size: 11, color: ink)
         case .kept: Image(systemName: "minus").foregroundStyle(.secondary).font(.system(size: 11))
         case .failed: Image(systemName: "xmark").foregroundStyle(.red).font(.system(size: 11))
         case .pending: Image(systemName: "circle").foregroundStyle(.secondary).font(.system(size: 11))

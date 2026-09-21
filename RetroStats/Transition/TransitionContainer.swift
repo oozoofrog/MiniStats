@@ -38,7 +38,6 @@ struct TransitionContainer<Content: View>: View {
     @State private var transitionStart: Date?
     @State private var activeTransition: (any PageTransition)?
     @State private var pages: TransitionPages?
-    @State private var gen = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var isTransitioning: Bool { pages?.previous != nil && !reduceMotion }
@@ -77,37 +76,30 @@ struct TransitionContainer<Content: View>: View {
     }
 
     private func startTransition() {
-        gen += 1
-        let myGen = gen
         var effect = transition
         effect.seed = Int.random(in: 1...1_000_000)
         activeTransition = effect
         transitionStart = .now
         progress = 0
-        withAnimation(.linear(duration: effect.duration)) {
+        withAnimation(.linear(duration: effect.duration), completionCriteria: .removed) {
             progress = 1
-        }
-        Task {
-            try? await Task.sleep(for: .milliseconds(Int(effect.duration * 1000) + 100))
-            await MainActor.run {
-                guard myGen == gen else { return }
-                transitionStart = nil
-                pages?.finish()
-                activeTransition = nil
-                progress = 0
-                // Give the completed page a render pass before animating the
-                // next request from progress zero.
-                Task { @MainActor in
-                    await Task.yield()
-                    guard !reduceMotion else { return }
-                    if pages?.beginPending() == true { startTransition() }
-                }
+        } completion: {
+            guard transitionStart != nil else { return }
+            transitionStart = nil
+            pages?.finish()
+            activeTransition = nil
+            progress = 0
+            // Give the completed page a render pass before animating the
+            // next request from progress zero.
+            Task { @MainActor in
+                await Task.yield()
+                guard !reduceMotion else { return }
+                if pages?.beginPending() == true { startTransition() }
             }
         }
     }
 
     private func resetTransition() {
-        gen += 1
         transitionStart = nil
         pages = TransitionPages(initial: currentPage)
         activeTransition = nil

@@ -1,515 +1,145 @@
-//
-//  Popover.swift
-//  
-//
-//  Created by oozoofrog on 9/14/26.
-//
-
-import Foundation
 import AppKit
-import QuartzCore
 
+/// Borderless transient panel anchored below a status item. NSPopover draws its
+/// own opaque chrome, so the glass dashboard surface uses this panel instead.
 final class TransparentPopover {
-    
-    var contentViewController: NSViewController? {
-        didSet {
-            panel.contentViewController = contentViewController
-            
-            if let view = contentViewController?.view {
-                view.wantsLayer = true
-                view.layer?.backgroundColor = NSColor.clear.cgColor
-            }
-        }
-    }
-    
-    var contentSize: NSSize = NSSize(width: 320, height: 400) {
-        didSet {
-            panel.setContentSize(contentSize)
-        }
-    }
-    
-    var behavior: NSPopover.Behavior = .applicationDefined {
-        didSet {
-            if isShown {
-                updateTransientTracking()
-            }
-        }
-    }
-    
-    var animates: Bool = true
-
-    weak var delegate: NSPopoverDelegate?
-    
-    var isShown: Bool {
-        state != .hidden
-    }
-    
-    var edgeSpacing: CGFloat = 6
-    
     private final class PopoverPanel: NSPanel {
         override var canBecomeKey: Bool { true }
         override var canBecomeMain: Bool { false }
     }
-    
-    private enum State {
-        case hidden
-        case showing
-        case shown
-        case closing
+
+    private enum State { case hidden, showing, shown, closing }
+
+    var contentViewController: NSViewController? {
+        didSet {
+            panel.contentViewController = contentViewController
+            contentViewController?.view.wantsLayer = true
+            contentViewController?.view.layer?.backgroundColor = NSColor.clear.cgColor
+        }
     }
-    
-    private let panel: PopoverPanel
-    
-    private var state: State = .hidden
-    
+    var contentSize = NSSize(width: 320, height: 400)
+    var animates = true
+    weak var delegate: NSPopoverDelegate?
+    var isShown: Bool { state != .hidden }
+
+    private let panel = PopoverPanel(contentRect: NSRect(x: 0, y: 0, width: 320, height: 240),
+                                     styleMask: [.borderless], backing: .buffered, defer: true)
+    private var state = State.hidden
     private weak var positioningView: NSView?
-    private var positioningRect: NSRect = .zero
-    
     private var localEventMonitor: Any?
     private var resignActiveObserver: NSObjectProtocol?
-    
+
     init() {
-        panel = PopoverPanel(
-            contentRect: NSRect(
-                x: 0,
-                y: 0,
-                width: 320,
-                height: 240
-            ),
-            styleMask: [.borderless],
-            backing: .buffered,
-            defer: true
-        )
-        
-        configurePanel()
-    }
-    
-    deinit {
-        removeTransientTracking()
-    }
-    
-    private func configurePanel() {
         panel.isOpaque = false
         panel.backgroundColor = .clear
-        
         panel.hasShadow = false
         panel.level = .popUpMenu
-        
-        panel.collectionBehavior = [
-            .canJoinAllSpaces,
-            .fullScreenAuxiliary
-        ]
-        
+        panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
         panel.isReleasedWhenClosed = false
-        panel.ignoresMouseEvents = false
-        panel.acceptsMouseMovedEvents = true
-        
         panel.animationBehavior = .none
-        
         panel.contentView?.wantsLayer = true
         panel.contentView?.layer?.backgroundColor = NSColor.clear.cgColor
     }
-    
-    func show(
-        relativeTo positioningRect: NSRect,
-        of positioningView: NSView,
-        preferredEdge: NSRectEdge
-    ) {
-        guard state == .hidden else {
-            return
-        }
-        
-        guard let window = positioningView.window else {
-            return
-        }
 
+    deinit { removeTransientTracking() }
+
+    func show(relativeTo positioningRect: NSRect, of positioningView: NSView, preferredEdge: NSRectEdge) {
+        guard state == .hidden, let window = positioningView.window else { return }
         self.positioningView = positioningView
-        self.positioningRect = positioningRect
-
         panel.setContentSize(contentSize)
-
-        let rectInWindow = positioningView.convert(
-            positioningRect,
-            to: nil
-        )
-
-        let anchorRect = window.convertToScreen(rectInWindow)
-
-        let frame = popupFrame(
-            anchoredTo: anchorRect,
-            preferredEdge: preferredEdge
-        )
-
+        let anchor = window.convertToScreen(positioningView.convert(positioningRect, to: nil))
         state = .showing
-
-        notifyWillShow()
-
-        panel.setFrame(frame, display: false)
-
-        if animates {
-            panel.alphaValue = 0
-        } else {
-            panel.alphaValue = 1
-        }
-
+        panel.setFrame(popupFrame(anchoredTo: anchor, preferredEdge: preferredEdge), display: false)
+        panel.alphaValue = animates ? 0 : 1
         panel.makeKeyAndOrderFront(nil)
-
-        updateTransientTracking()
-
-        guard animates else {
-            finishShowing()
-            return
-        }
-
-        NSAnimationContext.runAnimationGroup { [weak self] context in
-            guard let self else { return }
-
-            context.duration = 0.12
-            context.timingFunction = CAMediaTimingFunction(
-                name: .easeOut
-            )
-
-            panel.animator().alphaValue = 1
-
-        } completionHandler: { [weak self] in
-            self?.finishShowing()
+        installTransientTracking()
+        fade(to: 1, duration: 0.12, timing: .easeOut) { [weak self] in
+            guard let self, state == .showing else { return }
+            state = .shown
+            delegate?.popoverDidShow?(Notification(name: NSPopover.didShowNotification, object: self))
         }
     }
 
     func performClose(_ sender: Any?) {
-        close()
-    }
-
-    func close() {
-        guard state != .hidden,
-              state != .closing else {
-            return
-        }
-
+        guard state == .showing || state == .shown else { return }
         state = .closing
-
         removeTransientTracking()
-        notifyWillClose()
-
-        guard animates else {
-            finishClosing()
-            return
-        }
-
-        NSAnimationContext.runAnimationGroup { [weak self] context in
-            guard let self else { return }
-
-            context.duration = 0.10
-            context.timingFunction = CAMediaTimingFunction(
-                name: .easeIn
-            )
-
-            panel.animator().alphaValue = 0
-
-        } completionHandler: { [weak self] in
-            self?.finishClosing()
+        fade(to: 0, duration: 0.10, timing: .easeIn) { [weak self] in
+            guard let self, state == .closing else { return }
+            panel.orderOut(nil)
+            panel.alphaValue = 1
+            state = .hidden
+            delegate?.popoverDidClose?(Notification(name: NSPopover.didCloseNotification, object: self))
         }
     }
 
-    // MARK: - Show / close completion
-
-    private func finishShowing() {
-        // The popover may have been closed during the opening animation.
-        guard state == .showing else {
-            return
-        }
-
-        state = .shown
-        panel.alphaValue = 1
-
-        notifyDidShow()
-    }
-
-    private func finishClosing() {
-        guard state == .closing else {
-            return
-        }
-
-        panel.orderOut(nil)
-        panel.alphaValue = 1
-
-        state = .hidden
-
-        notifyDidClose()
+    private func fade(to alpha: CGFloat, duration: TimeInterval, timing: CAMediaTimingFunctionName, completion: @escaping () -> Void) {
+        guard animates else { panel.alphaValue = alpha; completion(); return }
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = duration
+            context.timingFunction = CAMediaTimingFunction(name: timing)
+            panel.animator().alphaValue = alpha
+        }, completionHandler: completion)
     }
 
     // MARK: - Position
 
-    private func popupFrame(
-        anchoredTo anchor: NSRect,
-        preferredEdge: NSRectEdge
-    ) -> NSRect {
+    private func popupFrame(anchoredTo anchor: NSRect, preferredEdge: NSRectEdge) -> NSRect {
         let size = contentSize
-
-        var origin: NSPoint
-
+        let spacing: CGFloat = 6
+        let origin: NSPoint
         switch preferredEdge {
-
-        case .minY:
-            // Below the anchor.
-            origin = NSPoint(
-                x: anchor.midX - size.width / 2,
-                y: anchor.minY - edgeSpacing - size.height
-            )
-
-        case .maxY:
-            // Above the anchor.
-            origin = NSPoint(
-                x: anchor.midX - size.width / 2,
-                y: anchor.maxY + edgeSpacing
-            )
-
-        case .minX:
-            // To the left of the anchor.
-            origin = NSPoint(
-                x: anchor.minX - edgeSpacing - size.width,
-                y: anchor.midY - size.height / 2
-            )
-
-        case .maxX:
-            // To the right of the anchor.
-            origin = NSPoint(
-                x: anchor.maxX + edgeSpacing,
-                y: anchor.midY - size.height / 2
-            )
-
-        @unknown default:
-            origin = NSPoint(
-                x: anchor.midX - size.width / 2,
-                y: anchor.minY - edgeSpacing - size.height
-            )
+        case .maxY: origin = NSPoint(x: anchor.midX - size.width / 2, y: anchor.maxY + spacing)
+        case .minX: origin = NSPoint(x: anchor.minX - spacing - size.width, y: anchor.midY - size.height / 2)
+        case .maxX: origin = NSPoint(x: anchor.maxX + spacing, y: anchor.midY - size.height / 2)
+        default: origin = NSPoint(x: anchor.midX - size.width / 2, y: anchor.minY - spacing - size.height)
         }
-
-        let candidate = NSRect(
-            origin: origin,
-            size: size
-        )
-
-        guard let screen = screen(containing: anchor) else {
-            return candidate
-        }
-
-        return constrain(
-            candidate,
-            to: screen.visibleFrame
-        )
-    }
-
-    private func screen(containing rect: NSRect) -> NSScreen? {
-        NSScreen.screens.max { lhs, rhs in
-            lhs.frame.intersection(rect).area
-                < rhs.frame.intersection(rect).area
-        }
-    }
-
-    private func constrain(
-        _ frame: NSRect,
-        to visibleFrame: NSRect
-    ) -> NSRect {
-        let margin: CGFloat = 8
-
-        var result = frame
-
-        let minimumX = visibleFrame.minX + margin
-        let maximumX =
-            visibleFrame.maxX - frame.width - margin
-
-        let minimumY = visibleFrame.minY + margin
-        let maximumY =
-            visibleFrame.maxY - frame.height - margin
-
-        if maximumX >= minimumX {
-            result.origin.x = min(
-                max(result.origin.x, minimumX),
-                maximumX
-            )
-        }
-
-        if maximumY >= minimumY {
-            result.origin.y = min(
-                max(result.origin.y, minimumY),
-                maximumY
-            )
-        }
-
-        return result
+        var frame = NSRect(origin: origin, size: size)
+        guard let screen = NSScreen.screens.max(by: { $0.frame.intersection(anchor).area < $1.frame.intersection(anchor).area }) else { return frame }
+        let visible = screen.visibleFrame.insetBy(dx: 8, dy: 8)
+        if visible.width >= size.width { frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - size.width) }
+        if visible.height >= size.height { frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - size.height) }
+        return frame
     }
 
     // MARK: - Transient behavior
 
-    private func updateTransientTracking() {
+    private func installTransientTracking() {
         removeTransientTracking()
-
-        guard behavior == .transient else {
-            return
+        // NSApp is activated before showing, so clicking another app fires didResignActive;
+        // no global event monitor (and no Input Monitoring permission) is needed.
+        resignActiveObserver = NotificationCenter.default.addObserver(forName: NSApplication.didResignActiveNotification, object: NSApp, queue: .main) { [weak self] _ in
+            self?.performClose(nil)
         }
-
-        guard state == .showing || state == .shown else {
-            return
-        }
-
-        /*
-         NSApp is activated with activate(ignoringOtherApps:) before the
-         popover is shown, so clicking another app triggers didResignActive.
-
-         A global event monitor is therefore unnecessary.
-         This also avoids requiring additional permissions such as Input Monitoring.
-         */
-
-        resignActiveObserver =
-            NotificationCenter.default.addObserver(
-                forName: NSApplication.didResignActiveNotification,
-                object: NSApp,
-                queue: .main
-            ) { [weak self] _ in
-                self?.performClose(nil)
-            }
-
-        localEventMonitor =
-            NSEvent.addLocalMonitorForEvents(
-                matching: [
-                    .leftMouseDown,
-                    .rightMouseDown,
-                    .otherMouseDown,
-                    .keyDown
-                ]
-            ) { [weak self] event in
-
-                guard let self else {
-                    return event
-                }
-
-                // ESC
-                if event.type == .keyDown {
-                    if event.keyCode == 53 {
-                        performClose(nil)
-                        return nil
-                    }
-
-                    return event
-                }
-
-                // Keep the popover open when clicking inside the panel.
-                if event.window === panel {
-                    return event
-                }
-
-                /*
-                 Do not close here when the status item itself was clicked.
-
-                 Otherwise:
-                     event monitor -> close
-                     status button action -> isShown == false -> open again
-
-                 This ordering would reopen the popover from a single click.
-
-                 Let the status button action's toggleDashboard() handle closing.
-                 */
-                if isEventInsidePositioningView(event) {
-                    return event
-                }
-
-                // Click in another part of this app.
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown, .otherMouseDown, .keyDown]) { [weak self] event in
+            guard let self else { return event }
+            if event.type == .keyDown {
+                guard event.keyCode == 53 else { return event }  // ESC
                 performClose(nil)
-
-                // Pass the original click through.
-                return event
+                return nil
             }
+            // Clicks inside the panel keep it open. Clicks on the status item are left to
+            // toggleDashboard(); closing here first would make that action reopen it.
+            if event.window === panel || isEventInsidePositioningView(event) { return event }
+            performClose(nil)
+            return event
+        }
     }
 
     private func removeTransientTracking() {
-        if let localEventMonitor {
-            NSEvent.removeMonitor(localEventMonitor)
-            self.localEventMonitor = nil
-        }
-
-        if let resignActiveObserver {
-            NotificationCenter.default.removeObserver(
-                resignActiveObserver
-            )
-
-            self.resignActiveObserver = nil
-        }
+        if let localEventMonitor { NSEvent.removeMonitor(localEventMonitor) }
+        if let resignActiveObserver { NotificationCenter.default.removeObserver(resignActiveObserver) }
+        localEventMonitor = nil
+        resignActiveObserver = nil
     }
 
-    private func isEventInsidePositioningView(
-        _ event: NSEvent
-    ) -> Bool {
-        guard let view = positioningView,
-              let window = view.window,
-              event.window === window else {
-            return false
-        }
-
-        let point = view.convert(
-            event.locationInWindow,
-            from: nil
-        )
-
-        return view.bounds.contains(point)
-    }
-
-    // MARK: - NSPopoverDelegate compatibility
-
-    private func notifyWillShow() {
-        let notification = Notification(
-            name: NSPopover.willShowNotification,
-            object: self
-        )
-
-        delegate?.popoverWillShow?(notification)
-
-        NotificationCenter.default.post(notification)
-    }
-
-    private func notifyDidShow() {
-        let notification = Notification(
-            name: NSPopover.didShowNotification,
-            object: self
-        )
-
-        delegate?.popoverDidShow?(notification)
-
-        NotificationCenter.default.post(notification)
-    }
-
-    private func notifyWillClose() {
-        let notification = Notification(
-            name: NSPopover.willCloseNotification,
-            object: self
-        )
-
-        delegate?.popoverWillClose?(notification)
-
-        NotificationCenter.default.post(notification)
-    }
-
-    private func notifyDidClose() {
-        let notification = Notification(
-            name: NSPopover.didCloseNotification,
-            object: self
-        )
-
-        delegate?.popoverDidClose?(notification)
-
-        NotificationCenter.default.post(notification)
+    private func isEventInsidePositioningView(_ event: NSEvent) -> Bool {
+        guard let view = positioningView, event.window === view.window else { return false }
+        return view.bounds.contains(view.convert(event.locationInWindow, from: nil))
     }
 }
 
-// MARK: - Helpers
-
 private extension NSRect {
-    var area: CGFloat {
-        guard !isNull, !isEmpty else {
-            return 0
-        }
-
-        return width * height
-    }
+    var area: CGFloat { isNull || isEmpty ? 0 : width * height }
 }

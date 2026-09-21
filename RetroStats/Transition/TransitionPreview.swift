@@ -25,7 +25,7 @@ struct TransitionPreview: View {
     var body: some View {
         VStack(spacing: 0) {
             TransitionContainer(
-                transition: style.makeTransition(seed: 0, color: .primary, duration: speed.duration),
+                transition: style.makeTransition(color: .primary, duration: speed.duration),
                 currentPage: page
             ) { p in
                 PreviewSamplePage(page: p)

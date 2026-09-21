@@ -29,8 +29,6 @@ METAL_AIR=$(mktemp "$OUTPUT/BitmapText.XXXXXX")
 trap 'rm -f "$METAL_AIR"' EXIT
 xcrun -sdk macosx metal -c RetroStats/PixelUI/BitmapText.metal -o "$METAL_AIR"
 xcrun -sdk macosx metallib "$METAL_AIR" -o "$APP/Contents/Resources/default.metallib"
-rm -f "$APP/Contents/Resources/Fonts/NeoDunggeunmo.woff" "$APP/Contents/Resources/Fonts/LICENSE.txt"
-rmdir "$APP/Contents/Resources/Fonts" 2>/dev/null || true
 codesign --force --sign - "$APP"
 "$APP/Contents/MacOS/RetroStats" --self-test
 printf 'Built: %s\n' "$APP"

@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import ServiceManagement
 
 final class DashboardModel: ObservableObject {
@@ -99,3 +100,5 @@ final class DashboardModel: ObservableObject {
         }
     }
 }
+
+enum DashboardPage { case overview, processes, storage, settings }

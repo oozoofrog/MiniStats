@@ -1,16 +1,17 @@
 import SwiftUI
 
-/// Seeded RNG so each transition produces a distinct but deterministic wave
-/// shape (stable across the frames of one transition, different per transition).
-private struct SeededRNG: RandomNumberGenerator {
-    var state: UInt64
-    init(seed: UInt64) { state = seed == 0 ? 0x9E3779B97F4A7C15 : seed }
-    mutating func next() -> UInt64 {
-        state ^= state << 13
-        state ^= state >> 7
-        state ^= state << 17
-        return state
-    }
+/// Deterministic unit value in [0, 1) for a seed and index; shared by the wave
+/// harmonics and the flip tile timing so one transition is stable across frames.
+func seededUnit(seed: Int, _ a: Int, _ b: Int = 0) -> Double {
+    var bits = UInt64(truncatingIfNeeded: seed)
+    bits &+= UInt64(truncatingIfNeeded: a) &* 0x9E3779B97F4A7C15
+    bits &+= UInt64(truncatingIfNeeded: b) &* 0xD1B54A32D192ED03
+    bits ^= bits >> 30
+    bits &*= 0xBF58476D1CE4E5B9
+    bits ^= bits >> 27
+    bits &*= 0x94D049BB133111EB
+    bits ^= bits >> 31
+    return Double(bits >> 11) / Double(1 << 53)
 }
 
 /// LCD pixel wave transition. A randomized multi-harmonic wave sweeps left to
@@ -55,16 +56,11 @@ struct PixelTransition: View {
     /// Randomized harmonic sum (amplitude × frequency × phase) for one
     /// transition. Stable for a given seed, varied across seeds.
     static func harmonics(seed: Int) -> [(amp: Double, freq: Double, phase: Double)] {
-        var rng = SeededRNG(seed: UInt64(bitPattern: Int64(seed)))
-        var hs: [(Double, Double, Double)] = []
-        for _ in 0..<5 {
-            hs.append((
-                Double.random(in: 8...34, using: &rng),
-                Double.random(in: 0.015...0.07, using: &rng),
-                Double.random(in: 0..<(2 * .pi), using: &rng)
-            ))
+        (0..<5).map { i in
+            (8 + 26 * seededUnit(seed: seed, i, 1),
+             0.015 + 0.055 * seededUnit(seed: seed, i, 2),
+             2 * .pi * seededUnit(seed: seed, i, 3))
         }
-        return hs
     }
 
     /// Wave-front x at a given y for a given progress, width, and harmonics.
@@ -333,16 +329,7 @@ struct FlipTransition: PageTransition {
     /// Stable across frames of one transition; a new transition seed gives a
     /// different order without storing mutable random state in the renderer.
     static func startDelay(row: Int, column: Int, seed: Int) -> Double {
-        var bits = UInt64(truncatingIfNeeded: seed)
-        bits &+= UInt64(row) &* 0x9E3779B97F4A7C15
-        bits &+= UInt64(column) &* 0xD1B54A32D192ED03
-        bits ^= bits >> 30
-        bits &*= 0xBF58476D1CE4E5B9
-        bits ^= bits >> 27
-        bits &*= 0x94D049BB133111EB
-        bits ^= bits >> 31
-        let unit = Double(bits >> 11) / Double(1 << 53)
-        return unit * latestStart
+        seededUnit(seed: seed, row, column) * latestStart
     }
 
     static func cellProgress(_ progress: Double, row: Int, column: Int, seed: Int) -> Double {
@@ -353,10 +340,6 @@ struct FlipTransition: PageTransition {
     static func flapScale(progress: Double) -> Double {
         let p = max(0, min(1, progress))
         return abs(cos(p * .pi))
-    }
-
-    static func showsOldFlap(progress: Double) -> Bool {
-        progress < 0.5
     }
 
     func newPageMask(progress: Double) -> AnyView {
@@ -428,14 +411,12 @@ enum TransitionStyle: String, CaseIterable {
         }
     }
 
-    /// Builds the concrete transition for this style. `DashboardView` calls
-    /// this from the persisted style and speed so the active transition carries
-    /// the chosen duration (shared by `TransitionContainer` and the overlay).
-    func makeTransition(seed: Int, color: Color, duration: Double) -> any PageTransition {
+    /// `TransitionContainer` assigns a fresh seed when a transition starts.
+    func makeTransition(color: Color, duration: Double) -> any PageTransition {
         switch self {
-        case .wave: return WaveTransition(seed: seed, color: color, duration: duration)
-        case .fade: return FadeTransition(seed: seed, color: color, duration: duration)
-        case .flip: return FlipTransition(seed: seed, color: color, duration: duration)
+        case .wave: return WaveTransition(seed: 0, color: color, duration: duration)
+        case .fade: return FadeTransition(seed: 0, color: color, duration: duration)
+        case .flip: return FlipTransition(seed: 0, color: color, duration: duration)
         }
     }
 }
