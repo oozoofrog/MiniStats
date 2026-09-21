@@ -163,23 +163,22 @@ struct DashboardContentView: View {
         VStack(alignment: .leading, spacing: 20) {
             switch page {
             case .overview:
-                if compact { RetroSectionHeading(title: "SYSTEM MONITOR", detail: "LIVE") }
-                else { RetroPageHeading(eyebrow: "SYSTEM MONITOR", title: "A little order.\nAt a glance.", stamp: "RETRO\nSTATS") }
+                RetroPageHeading(title: "Overview")
                 overview
             case .cpu:
-                RetroPageHeading(eyebrow: "01 / PROCESSOR", title: "CPU", stamp: "LIVE\nMETER")
+                RetroPageHeading(title: "CPU")
                 processDetails(order: .cpu)
             case .memory:
-                RetroPageHeading(eyebrow: "02 / MEMORY", title: "Memory", stamp: "LIVE\nMETER")
+                RetroPageHeading(title: "Memory")
                 processDetails(order: .memory)
             case .network:
-                RetroPageHeading(eyebrow: "03 / NETWORK", title: "Coming and going.", stamp: "DATA\nI/O")
+                RetroPageHeading(title: "Network")
                 networkDetails
             case .storage:
-                RetroPageHeading(eyebrow: "DISK UTILITY", title: "A place for everything.", stamp: "DISK\n01")
+                RetroPageHeading(title: "Storage")
                 storageDetails
             case .settings:
-                RetroPageHeading(eyebrow: "CONTROL PANEL", title: "Make yourself at home.", stamp: "SET\nUP")
+                RetroPageHeading(title: "Settings")
                 settings
             }
         }

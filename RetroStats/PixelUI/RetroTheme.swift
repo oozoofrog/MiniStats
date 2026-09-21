@@ -105,26 +105,15 @@ struct RetroTitleBar: View {
 }
 
 struct RetroPageHeading: View {
-    let eyebrow: String
     let title: String
-    let stamp: String
-    @Environment(\.retroPalette) private var palette
     @Environment(\.retroCompact) private var compact
 
     var body: some View {
-        HStack(alignment: .center, spacing: 18) {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(eyebrow).font(.bitmap(11)).foregroundStyle(palette.muted)
-                Text(title).font(.bitmap(compact ? 20 : 26)).fixedSize(horizontal: false, vertical: true)
-            }
-            Spacer(minLength: 0)
-            if !compact { Text(stamp).font(.bitmap(11)).multilineTextAlignment(.center)
-                .padding(12)
-                .overlay(Rectangle().strokeBorder(palette.line, lineWidth: 1).padding(3))
-                .overlay(Rectangle().strokeBorder(palette.ink, lineWidth: 1))
-                .accessibilityHidden(true) }
-        }
-        .padding(.bottom, 6)
+        Text(title)
+            .font(.bitmap(compact ? 20 : 26))
+            .fixedSize(horizontal: false, vertical: true)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.bottom, 6)
     }
 }
 

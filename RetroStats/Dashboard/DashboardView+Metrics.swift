@@ -66,7 +66,7 @@ extension DashboardContentView {
                         Text(model.memory.map { bytes($0.used) } ?? "—").font(.bitmap(16))
                     }
                 } else {
-                    RetroSectionHeading(title: "02 / MEMORY", detail: "↗")
+                    RetroSectionHeading(title: "MEMORY", detail: "↗")
                     Text(model.memory.map { bytes($0.used) } ?? "—").font(.bitmap(22))
                     UsageBar(percent: model.memory?.percent ?? 0, color: ink)
                 }
@@ -88,7 +88,7 @@ extension DashboardContentView {
                         Text("↓ " + model.download).font(.bitmap(14))
                     }
                 } else {
-                    RetroSectionHeading(title: "03 / NETWORK", detail: "↗")
+                    RetroSectionHeading(title: "NETWORK", detail: "↗")
                     Text("↓ " + model.download).font(.bitmap(20))
                 }
                 Text("↑ " + model.upload).font(.bitmap(12))
@@ -152,7 +152,7 @@ struct RetroProcessorPanel: View {
     var body: some View {
         LCDScreen {
             VStack(alignment: .leading, spacing: compact ? 12 : 16) {
-                RetroSectionHeading(title: compact ? "PROCESSOR" : "01 / PROCESSOR", detail: "CPU LOAD")
+                RetroSectionHeading(title: "PROCESSOR", detail: "CPU LOAD")
                 HStack(alignment: .bottom, spacing: 8) {
                     Text(model.cpu.map { String(format: "%.0f", $0.total) } ?? "—")
                         .font(.bitmap(compact ? 40 : 48))
