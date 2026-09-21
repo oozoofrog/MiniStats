@@ -173,11 +173,11 @@ def main() -> None:
     font.setupGlyf(glyphs)
     glyf = font.font["glyf"]
     font.setupHorizontalMetrics({
-        name: (0 if name == ".null" else 900 if name in {names[ch] for ch in HANGUL} else 600,
+        name: (0 if name == ".null" else 1000 if name in {names[ch] for ch in HANGUL} else 600,
                getattr(glyf[name], "xMin", 0))
         for name in order
     })
-    font.setupHorizontalHeader(ascent=900, descent=-200)  # 900 leaves room for cells snapped up to whole pixels
+    font.setupHorizontalHeader(ascent=1000, descent=-200)  # room for cells snapped up to whole pixels
     family = "RetroBitmapA"
     font.setupNameTable({
         "familyName": family,
@@ -187,7 +187,7 @@ def main() -> None:
         "psName": "RetroBitmapA-Regular",
         "version": "Version 1.0",
     })
-    font.setupOS2(sTypoAscender=900, sTypoDescender=-200, usWinAscent=900,
+    font.setupOS2(sTypoAscender=1000, sTypoDescender=-200, usWinAscent=1000,
                   usWinDescent=200, sCapHeight=700, sxHeight=600, xAvgCharWidth=600)
     font.setupPost(isFixedPitch=1)
     font.font.recalcTimestamp = False

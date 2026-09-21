@@ -48,7 +48,7 @@ private func requireEqual(_ a: BitmapMask, _ b: BitmapMask, _ message: String) {
 
 @MainActor func bitmapTextSelfTest() {
     _ = NSApplication.shared
-    let samples: [(String, CGFloat)] = [("i", 0.6), ("W", 0.6), ("8", 0.6), ("|", 0.6), ("한", 0.9), ("글", 0.9)]
+    let samples: [(String, CGFloat)] = [("i", 0.6), ("W", 0.6), ("8", 0.6), ("|", 0.6), ("한", 1.0), ("글", 1.0)]
     let styles: [(String, HierarchicalShapeStyle)] = [("primary", .primary), ("secondary", .secondary)]
     for (styleName, style) in styles {
         for scale in [1.0, 2.0] {
@@ -72,8 +72,8 @@ private func requireEqual(_ a: BitmapMask, _ b: BitmapMask, _ message: String) {
                     let bitmap = render(0)
                     let advance = size * advanceRatio * scale
                     let hangul = advanceRatio > 0.7
-                    let cellPx = BitmapTextRenderer.snappedCell(size * (hangul ? 0.07 : 0.1), advance: size * advanceRatio, ascent: size * 0.9, cells: hangul ? 11 : 7, displayScale: scale) * scale
-                    // A 1px cell can still overflow a tiny 1x advance; neighbours then share columns.
+                    let cellPx = BitmapTextRenderer.snappedCell(size * (hangul ? 0.07 : 0.1), displayScale: scale) * scale
+                    // Snapped cells can overflow a 1x advance (16pt ASCII, small Hangul); neighbours then share columns.
                     let overflows = (hangul ? 11 : 5) * cellPx > advance + 0.001
                     var reference: BitmapMask?
                     for index in 0..<20 {

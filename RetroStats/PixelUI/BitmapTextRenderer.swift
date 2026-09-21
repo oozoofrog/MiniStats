@@ -3,12 +3,9 @@ import SwiftUI
 /// Snaps rendered glyphs to the font's grid and removes antialiasing.
 /// RetroBitmapA supplies authored glyphs; unsupported Unicode keeps system fallback.
 struct BitmapTextRenderer: TextRenderer {
-    /// Font cell rounded to whole device pixels. Rounds down one pixel instead
-    /// when the snapped glyph would spill past its advance or above the ascent.
-    static func snappedCell(_ fontCell: CGFloat, advance: CGFloat, ascent: CGFloat, cells: CGFloat, displayScale: CGFloat) -> CGFloat {
-        var px = max(1, (fontCell * displayScale).rounded())
-        if px > 1, px * cells > min(advance, ascent) * displayScale + 0.001 { px -= 1 }
-        return px / displayScale
+    /// Font cell rounded to a whole number of device pixels, never below one.
+    static func snappedCell(_ fontCell: CGFloat, displayScale: CGFloat) -> CGFloat {
+        max(1, (fontCell * displayScale).rounded()) / displayScale
     }
 
     func draw(layout: Text.Layout, in context: inout GraphicsContext) {
@@ -19,24 +16,26 @@ struct BitmapTextRenderer: TextRenderer {
             for run in line {
                 for glyph in run {
                     let bounds = glyph.typographicBounds
-                    // RetroBitmapA: ascent 0.9em + descent 0.2em; cells are 0.1em (ASCII) or 0.07em (authored Hangul).
-                    let em = (bounds.ascent + bounds.descent) / 1.1
-                    let authoredHangul = abs(bounds.width / em - 0.9) < 0.01
+                    // RetroBitmapA: ascent 1.0em, descent 0.2em (ratio 5, unlike any system font),
+                    // ASCII cells 0.1em in a 0.6em advance, authored Hangul cells 0.07em in a 1.0em advance.
+                    let authored = abs(bounds.ascent / bounds.descent - 5) < 0.01
+                    let em = (bounds.ascent + bounds.descent) / 1.2
+                    let authoredHangul = authored && abs(bounds.width / em - 1) < 0.01
                     let fontCell = em * (authoredHangul ? 0.07 : 0.1)
-                    // Snap each font cell to a whole number of device pixels so every stroke
-                    // has the same thickness at every size; the glyph grows or shrinks slightly
-                    // relative to its advance instead of alternating 2px/3px cells.
-                    let pixel = Self.snappedCell(fontCell, advance: bounds.width, ascent: bounds.ascent, cells: authoredHangul ? 11 : 7, displayScale: displayScale)
-                    let grow = pixel / fontCell
+                    // Snap each cell to whole device pixels so every stroke has the same thickness.
+                    // Authored glyphs are rescaled to the snapped grid; fallback glyphs keep their
+                    // size and are only pixelated on it.
+                    let pixel = Self.snappedCell(fontCell, displayScale: displayScale)
+                    let grow = authored ? pixel / fontCell : 1
                     context.drawLayer { layer in
                         layer.addFilter(
                             .layerShader(ShaderLibrary.bitmapText(.float(Float(pixel)),
                                                                   .float2(Float(bounds.origin.x), Float(bounds.origin.y)),
                                                                   .float(Float(displayScale)),
-                                                                  .float(Float(fontCell * sourceScale)),
+                                                                  .float(Float(pixel / grow * sourceScale)),
                                                                   .float3(Float(bounds.width * grow), Float(bounds.ascent * grow), Float(bounds.descent * grow))),
-                                         maxSampleOffset: CGSize(width: fontCell * sourceScale + (sourceScale - 1) * bounds.width,
-                                                                 height: fontCell * sourceScale + (sourceScale - 1) * (bounds.ascent + bounds.descent)))
+                                         maxSampleOffset: CGSize(width: (bounds.width + pixel) * sourceScale,
+                                                                 height: (bounds.ascent + bounds.descent + pixel) * sourceScale))
                         )
                         layer.translateBy(x: bounds.origin.x, y: bounds.origin.y)
                         layer.scaleBy(x: sourceScale, y: sourceScale)
