@@ -30,8 +30,7 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | CPU·메모리·네트워크·디스크·배터리 계산 | `RetroStats/Metrics/Metrics.swift`: `cpuLoad`, `memoryUsage`, `parseNetwork`, `networkRate`, `DiskUsage` |
 | 프로세스 샘플링·순위 | `RetroStats/Metrics/Processes.swift`: `processSamples`, `rankedProcesses`, `ProcessOrder` |
 | 메뉴바·자동 실행·진단 인수 | `RetroStats/App/AppDelegate.swift`: `AppDelegate`, `StatusReadout`, `diagnostic`; `RetroStats/App/main.swift` |
-| 메뉴바 팝오버·대시보드 창 | `RetroStats/Dashboard/MenuPopoverView.swift`, `DashboardSurfaceController.swift`; `AppDelegate.openDashboard` |
-| 팝오버 위치·닫기 동작 | `RetroStats/PixelUI/Popover.swift`: `TransparentPopover` |
+| 반응형 단일 창·메뉴바 열기/닫기 | `RetroStats/Dashboard/DashboardView.swift`, `DashboardSurfaceController.swift`; `AppDelegate.openDashboard`, `toggleDashboardSize` |
 | 디스크 경고·알림·정리 진행 상태 | `RetroStats/Storage/StorageController.swift`: `StorageController`; `Storage/CacheReport.swift`: `CacheReport`, `CleanProgress` |
 | DerivedData 조회·삭제 보호 | `RetroStats/Storage/DerivedDataCleaner.swift`: `inspect`, `eligible`, `ensureIdle`, `clean` |
 | 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
@@ -60,10 +59,10 @@ GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으�
 
 ## 대시보드 검증
 
-- 메뉴바 클릭 → 작은 팝오버 → Open dashboard → 사이드바의 CPU/메모리 상세 정렬 → 네트워크 → 스토리지 선택/선택 해제 → 설정을 확인한다. 실제 사용자 캐시는 삭제하지 않는다.
-- 팝오버에서 대시보드 창으로 넘어갈 때 프로세스 측정이 초기화되지 않아야 한다. 두 화면을 모두 닫으면 프로세스 샘플링을 중단한다. 대시보드 창의 이동·크기 변경·닫기(⌘W)와 최소화(⌘M)는 AppKit이 처리한다.
+- 메뉴바 클릭 → 단일 창 → 상단 탐색 또는 사이드바의 독립 CPU/메모리 페이지 → 네트워크 → 스토리지 선택/선택 해제 → 설정을 확인한다. 실제 사용자 캐시는 삭제하지 않는다.
+- 처음에는 400×660 크기로 열리며, 창 우측 상단의 확대/축소 버튼이나 창 가장자리로 크기를 바꾼다. 폭 680pt에서 상단 탐색과 사이드바가 전환된다. 같은 호스팅 뷰를 유지하므로 페이지·스토리지 선택·측정 상태가 초기화되지 않아야 한다. 메뉴바 재클릭 또는 ⌘W로 닫으면 프로세스 샘플링을 중단한다. 창을 다른 앱 뒤로 보내도 자동으로 닫히지 않는다.
 - `--show-dashboard`와 `--show-storage`는 대시보드 창의 시작 화면을 지정한다.
-- `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드의 여섯 화면과 메뉴바 팝오버를 PNG로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. 상세 화면은 전체 내용을 확인할 수 있도록 긴 캔버스로 출력한다. SwiftUI 콘텐츠 배치 검사이며, 실제 창 타이틀바와 마우스 조작 검증을 대신하지 않는다.
+- `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드에서 360pt·400pt·840pt 폭의 여섯 화면을 PNG 36개로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. 상세 화면은 전체 내용을 확인할 수 있도록 긴 캔버스로 출력한다. SwiftUI 콘텐츠 배치 검사이며, 실제 창 타이틀바와 마우스 조작 검증을 대신하지 않는다.
 - `--bench-cleanup [항목 수]`(기본 100000)는 파일 시스템을 스텁으로 대체한 채 `clean` 루프(항목별 재검사·삭제 호출·이벤트 전달)만 시간을 잰다. 정리 로직 변경 전후 비교용이며 디스크를 건드리지 않는다.
 - `--diagnostics-output <절대 로그 경로>`는 프로세스 조회 수와 실패 코드를 기록하는 선택적 진단 인수다. 평소 실행에는 필요 없다.
 - SourceKit-LSP가 직접 `swiftc`로 묶는 파일들의 빌드 설정을 읽지 못하면 다른 파일의 심볼을 찾지 못하는 진단이 나올 수 있다. 컴파일 판정은 `make verify` 결과를 따른다.

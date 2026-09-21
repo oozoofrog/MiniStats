@@ -4,86 +4,52 @@
 
 ## 화면 구조 개요
 
-```
-┌─ Popover (TransparentPopover, 400×600) ────────────────────┐
-│ ┌─ Header ──────────────────────────────────────────────┐ │
-│ │ [뒤로] [타이틀]                          [실시간 LED] [설정] │ │
-│ └────────────────────────────────────────────────────────┘ │
-│ ┌─ Page Area (전환 애니메이션 영역) ───────────────────────┐ │
-│ │ overview | processes | storage | settings 중 1페이지    │ │
-│ └────────────────────────────────────────────────────────┘ │
-│ ┌─ Action Bar (storage 페이지에서만) ─────────────────────┐ │
-│ │ [공용 캐시 포함 토글] / [선택 정리 버튼] 등               │ │
-│ └────────────────────────────────────────────────────────┘ │
-│ ┌─ Footer ────────────────────────────────────────────────┐ │
-│ │ [코어·메모리]                          [3초마다 갱신]      │ │
-│ └────────────────────────────────────────────────────────┘ │
-└────────────────────────────────────────────────────────────┘
-```
+메뉴바에서 여는 하나의 `NSWindow`가 기본 화면과 대시보드를 모두 담당한다. 별도 팝오버나 창 전환은 없다.
+
+- 첫 크기: 400×660pt, 최소 크기: 360×500pt.
+- 폭 680pt 미만: 상단 3열 탐색, CPU 계기판, 세로 메모리/네트워크 요약. Top Processes는 접어서 표시한다.
+- 폭 680pt 이상: 좌측 사이드바, 가로 요약, CPU/메모리 프로세스 목록을 함께 표시한다.
+- 우측 상단 확대/축소 버튼 또는 창 가장자리로 같은 창을 조절한다. 페이지·선택 상태는 `DashboardContentView`에 남는다.
+- 창 안의 긴 페이지는 스크롤되며, 스토리지 작업 버튼은 하단에 유지된다.
+- 메뉴바 재클릭이나 ⌘W로 닫는다. 다른 앱을 클릭해도 자동으로 닫히지 않는다.
 
 ## 페이지 (DashboardPage)
 
-`DashboardPage` enum: `overview`, `processes`, `storage`, `settings`
+`overview`, `cpu`, `memory`, `network`, `storage`, `settings`. CPU와 Memory는 서로 다른 페이지이며, 공통 정렬 선택 상태를 공유하지 않는다.
 
-`model.page`가 바뀌면 `TransitionContainer`가 변경을 감지해 전환한다. 전환 중 요청은 마지막 페이지를 기억했다가 현재 효과가 끝난 뒤 실행한다. macOS의 동작 줄이기 설정에서는 즉시 전환한다.
+`model.page` 변경은 `TransitionContainer`가 처리한다. 창 폭 변경은 페이지 전환이 아니며 같은 호스팅 뷰를 유지한다.
 
 ## Header
 
-| 요소 | 심볼 | 위치 | 설명 |
-| --- | --- | --- | --- |
-| 뒤로 버튼 | `Image(chevron.left)` | 좌측 | `model.page != .overview`일 때 표시. `model.page = .overview` |
-| 타이틀 | `Text(title)` | 좌측 | 페이지별 제목 (RetroStats / 프로세스 / 스토리지 정리 / 설정) |
-| 실시간 표시 | `Text("실시간")` + `PixelLED` | 우측 | `.overview`에서만 표시 |
-| 설정 버튼 | `PixelSliders` | 우측 | `model.page = .settings` |
+`RetroTitleBar`의 줄무늬와 픽셀 타이틀을 공통으로 사용한다. 창의 닫기·최소화·확대는 AppKit 기본 컨트롤이며, 우측에는 같은 창의 크기를 전환하는 버튼이 있다.
 
 ## Footer
 
-| 요소 | 설명 |
-| --- | --- |
-| 코어·메모리 | `\(activeProcessorCount)코어 · \(bytes(totalMemory))` |
-| 갱신 주기 | `3초마다 갱신` |
-
----
+`SYSTEM MONITOR`와 `UPDATES EVERY 3 SEC`를 표시한다. 코어·메모리 사양은 넓은 화면의 사이드바에 표시한다.
 
 ## Overview 페이지 (`overview`)
 
-대시보드 메인 화면. 4개 섹션으로 구성.
+같은 데이터와 페이지를 화면 폭에 맞춰 재배치한다.
 
-### Overview 섹션
-
-| 요소 | 심볼 | 설명 |
+| 요소 | 구현 | 반응형 동작 |
 | --- | --- | --- |
-| CPU 카드 | `metric(order: .cpu, ...)` | LCDScreen에 큰 숫자% + HistoryLine. 탭 시 `.processes` 전환 |
-| 메모리 카드 | `metric(order: .memory, ...)` | LCDScreen에 큰 숫자% + HistoryLine. 탭 시 `.processes` 전환 |
-| 네트워크 | `Label("네트워크")` | 다운로드(↓) / 업로드(↑) 속도 |
-| 스토리지 카드 | `Button { model.page = .storage }` | 디스크 % + UsageBar + 여유 공간 + 정리 후보. 탭 시 `.storage` 전환 |
-| 배터리/활성상태 | `Text(battery)` + `Button("활성 상태 보기")` | 배터리 상태 + 활성 상태 보기 실행 |
+| CPU 계기판 | `RetroProcessorPanel` | 좁은 화면은 숫자와 히스토리, 넓은 화면은 코어·유휴율도 표시 |
+| 메모리 요약 | `memorySummary` | 좁으면 한 줄 요약, 넓으면 사용률 바 포함 |
+| 네트워크 요약 | `networkSummary` | 다운로드/업로드 표시. 클릭 시 같은 창의 `.network`로 이동 |
+| 상위 프로세스 | `topProcesses` | 좁으면 DisclosureGroup 안에 세로 배치, 넓으면 CPU/Memory 목록을 나란히 표시 |
+| 스토리지 | 버튼 | 볼륨 이름·여유 공간·전체 용량. 클릭 시 같은 창의 `.storage`로 이동 |
+| 배터리/활성 상태 | 텍스트와 버튼 | 배터리 상태 및 Activity Monitor 실행 |
 
-### Metric 카드 구조 (`metric(order:value:subtitle:history:)`)
+## Network 페이지 (`networkDetails`)
 
-```
-┌─ Metric Card (Button, .plain) ───────┐
-│ CPU                       ↗           │  ← 라벨 + 화살표
-│ ┌─ LCDScreen ──────────────────────┐ │
-│ │  42%                              │ │  ← 큰 숫자 (pixel 40)
-│ │  ▁▂▃▅▇▆▄▃▂▁  (HistoryLine)       │ │  ← 히스토리 그래프
-│ └───────────────────────────────────┘ │
-│ 전체 코어 사용률                        │  ← 부제목
-│ 상위 프로세스                           │  ← 섹션 라벨
-│ Xcode  45.2%                           │  ← 상위 3개 프로세스
-│ ...                                    │
-└───────────────────────────────────────┘
-```
+다운로드/업로드 전송률 계기판과 측정 기준을 표시한다. 실측하는 물리 인터페이스의 합계를 사용하며 연결 종류나 가상의 기록을 표시하지 않는다.
 
----
+## CPU / Memory 페이지 (`processDetails(order:)`)
 
-## Processes 페이지 (`processDetails`)
-
-상위 프로세스 상세 화면.
+CPU와 Memory는 독립 페이지다. 공통 표시 컴포넌트에는 해당 페이지의 정렬 기준을 고정해서 전달한다. CPU 페이지는 CPU 사용률·사용자/시스템 비율·로드 평균과 CPU 상위 프로세스를, Memory 페이지는 메모리 사용량·압축·압력·스왑과 메모리 상위 프로세스를 표시한다.
 
 | 요소 | 설명 |
 | --- | --- |
-| 정렬 Picker | `.segmented` (CPU / 메모리) |
 | 요약 숫자 | 전체 CPU% 또는 사용 메모리 |
 | 분석 텍스트 | 사용자/시스템 비율, 로드 평균, 메모리 압력/스왑 |
 | 프로세스 리스트 | 상위 5개 (아이콘 + 이름 + PID + 값) |
@@ -100,13 +66,13 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 
 | 요소 | 심볼 | 상태 조건 | 설명 |
 | --- | --- | --- | --- |
-| 디스크 요약 | `Text(bytes(disk.free))` + `UsageBar` | `disk != nil` | 여유 공간 + 사용률 바 |
+| 디스크 요약 | `Text(bytes(disk.free))` + `RetroDiskMap` | `disk != nil` | 여유 공간 + 정사각 셀 디스크 맵 |
 | DerivedData 헤더 | `Text("DerivedData")` | 항상 | 8시간 기준 안내 |
 | PixelHourglass | `PixelHourglass` | `busy && cleaning` | 정리 중 표시 (조회 중에는 미표시) |
 | 새로고침 버튼 | `PixelRefresh(animating:)` | 항상 | `busy`면 애니메이션 + 비활성화 |
 | 스캔 진행 텍스트 | `Text("조회 중: \(name)")` | `busy && !cleaning` | 현재 검사 중인 경로 |
 | 정리 진행 텍스트 | `Text("선택한 캐시 정리 중…")` | `busy && cleaning` | 정리 중 메시지 |
-| 에러 | `Text(error)` | `lastError != nil` | 빨간색, 텍스트 선택 가능 |
+| 에러 | `Text(error)` | `lastError != nil` | 디더 표식과 기본 잉크 색, 텍스트 선택 가능 |
 | 후보 리스트 | `ForEach(report.candidates)` | `report != nil && cleanProgress == nil` | 토글 + 이름 + 크기 + Finder 버튼 |
 | 전체/최근조회 | `Text(...)` | `report != nil` | 전체 캐시 수 + 조회 시간 |
 
@@ -212,12 +178,12 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 
 | 컴포넌트 | 파일 | 설명 |
 | --- | --- | --- |
-| `LCDScreen` | LCD.swift | 어두운 배경 + 흰 텍스트 LCD 화면 컨테이너 |
-| `LCDPanelBackground` | LCD.swift |lcdPanel 모디파이어 (패널 배경) |
+| `LCDScreen` | LCD.swift | 현재 마감과 밝기 모드를 따르는 불투명 계기판 |
+| `RetroPanelBackground` | LCD.swift | `retroPanel` 모디파이어 (사각 패널 배경) |
 | `UsageBar` | LCD.swift | 사용률 바 (디스크, 정리 진행) |
 | `HistoryLine` | LCD.swift | 히스토리 그래프 (CPU/메모리) |
 | `PixelButtonStyle` | PixelControls.swift | `.pixel` / `.pixelPrimary` / `.pixelGhost` 버튼 스타일 |
 | `PixelToggleStyle` | PixelControls.swift | `.pixelToggle` 토글 스타일 |
-| `TransparentPopover` | Popover.swift | 메뉴바 투명 팝오버 |
+| `DashboardContentView` | DashboardView.swift | 폭에 맞춰 재배치되는 단일 화면과 선택 상태 |
 | `DashboardSurfaceController` | DashboardSurfaceController.swift | NSViewController 래퍼 |
 | `StatusReadout` | AppDelegate.swift | 메뉴바 아이콘 + 텍스트 표시 |

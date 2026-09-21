@@ -15,8 +15,9 @@ enum RetroFinish: String, CaseIterable {
 
 enum RetroLayout {
     static let dashboardSize = CGSize(width: 840, height: 760)
-    static let dashboardMinimum = CGSize(width: 760, height: 660)
-    static let popoverSize = CGSize(width: 336, height: 510)
+    static let compactSize = CGSize(width: 400, height: 660)
+    static let dashboardMinimum = CGSize(width: 360, height: 500)
+    static let sidebarBreakpoint: CGFloat = 680
 }
 
 /// Opaque, appearance-aware surfaces shared by the window and the menu panel.
@@ -56,7 +57,15 @@ private struct RetroPaletteKey: EnvironmentKey {
     static let defaultValue = RetroPalette()
 }
 
+private struct RetroCompactKey: EnvironmentKey {
+    static let defaultValue = false
+}
+
 extension EnvironmentValues {
+    var retroCompact: Bool {
+        get { self[RetroCompactKey.self] }
+        set { self[RetroCompactKey.self] = newValue }
+    }
     var retroPalette: RetroPalette {
         get { self[RetroPaletteKey.self] }
         set { self[RetroPaletteKey.self] = newValue }
@@ -100,19 +109,20 @@ struct RetroPageHeading: View {
     let title: String
     let stamp: String
     @Environment(\.retroPalette) private var palette
+    @Environment(\.retroCompact) private var compact
 
     var body: some View {
         HStack(alignment: .center, spacing: 18) {
             VStack(alignment: .leading, spacing: 10) {
                 Text(eyebrow).font(.bitmap(11)).foregroundStyle(palette.muted)
-                Text(title).font(.bitmap(26)).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(.bitmap(compact ? 20 : 26)).fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
-            Text(stamp).font(.bitmap(11)).multilineTextAlignment(.center)
+            if !compact { Text(stamp).font(.bitmap(11)).multilineTextAlignment(.center)
                 .padding(12)
                 .overlay(Rectangle().strokeBorder(palette.line, lineWidth: 1).padding(3))
                 .overlay(Rectangle().strokeBorder(palette.ink, lineWidth: 1))
-                .accessibilityHidden(true)
+                .accessibilityHidden(true) }
         }
         .padding(.bottom, 6)
     }

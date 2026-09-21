@@ -26,9 +26,8 @@ private struct BitmapStatusText: View {
     }
 }
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSWindowDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let dashboard = DashboardModel()
-    private let popover = TransparentPopover()
     private var dashboardWindow: NSWindow?
     private let status = NSStatusBar.system.statusItem(withLength: 38)
     private let readout = NSHostingView(rootView: BitmapStatusText(cpu: nil, memory: nil))
@@ -63,12 +62,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
         dashboard.storage = storage
         dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }
         dashboard.quit = { [weak self] in self?.quitApp() }
-        popover.contentViewController = NSHostingController(rootView: MenuPopoverView(model: dashboard) { [weak self] page, order in
-            self?.openDashboard(page: page, order: order)
-        })
-        popover.contentSize = RetroLayout.popoverSize
-        popover.animates = !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
-        popover.delegate = self
         status.button?.target = self
         status.button?.action = #selector(toggleDashboard)
         installMainMenu()
@@ -128,30 +121,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
     }
 
     @objc private func toggleDashboard() {
-        if popover.isShown { popover.performClose(nil) }
-        else { showPopover() }
-    }
-
-    private func showPopover() {
-        guard let button = status.button else { return }
-        if !popover.isShown {
-            NSApp.activate(ignoringOtherApps: true)
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+        if let window = dashboardWindow, window.isVisible && !window.isMiniaturized {
+            window.performClose(nil)
+        } else {
+            openDashboard(page: dashboard.page)
         }
-        self.storage?.checkDisk()
     }
-
-    func popoverDidShow(_ notification: Notification) { dashboard.setPresented(.popover, true) }
-
-    func popoverDidClose(_ notification: Notification) { dashboard.setPresented(.popover, false) }
 
     private func showStorageMenu() { openDashboard(page: .storage) }
 
-    private func openDashboard(page: DashboardPage, order: ProcessOrder? = nil) {
-        if let order { dashboard.order = order }
+    private func openDashboard(page: DashboardPage) {
         dashboard.page = page
         if dashboardWindow == nil {
-            let window = NSWindow(contentRect: NSRect(origin: .zero, size: RetroLayout.dashboardSize),
+            let window = NSWindow(contentRect: NSRect(origin: .zero, size: RetroLayout.compactSize),
                                   styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
                                   backing: .buffered, defer: false)
             window.title = "RetroStats"
@@ -159,25 +141,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate, NSW
             window.titlebarAppearsTransparent = true
             window.isReleasedWhenClosed = false
             window.contentMinSize = RetroLayout.dashboardMinimum
-            window.contentViewController = DashboardSurfaceController(model: dashboard)
+            window.contentViewController = DashboardSurfaceController(model: dashboard, toggleSize: { [weak self] in self?.toggleDashboardSize() })
             window.delegate = self
             window.center()
-            window.setFrameAutosaveName("RetroStatsDashboard")
+            if !window.setFrameUsingName("RetroStatsResponsiveDashboard"),
+               let button = status.button, let statusWindow = button.window {
+                let anchor = statusWindow.convertToScreen(button.convert(button.bounds, to: nil))
+                let screen = statusWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
+                let x = min(max(anchor.midX - window.frame.width / 2, screen.minX), screen.maxX - window.frame.width)
+                let y = max(screen.minY, anchor.minY - window.frame.height - 6)
+                window.setFrameOrigin(NSPoint(x: x, y: y))
+            }
+            window.setFrameAutosaveName("RetroStatsResponsiveDashboard")
             dashboardWindow = window
         }
-        // Register the destination before closing the source so sampling stays live.
-        dashboard.setPresented(.window, true)
+        dashboard.setPresented(true)
         dashboard.refreshContext()
         NSApp.activate(ignoringOtherApps: true)
         dashboardWindow?.deminiaturize(nil)
         dashboardWindow?.makeKeyAndOrderFront(nil)
-        popover.performClose(nil)
         storage?.checkDisk()
+    }
+
+    private func toggleDashboardSize() {
+        guard let window = dashboardWindow else { return }
+        let compact = (window.contentView?.bounds.width ?? 0) < RetroLayout.sidebarBreakpoint
+        let size = compact ? RetroLayout.dashboardSize : RetroLayout.compactSize
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if let screen = window.screen {
+            let visible = screen.visibleFrame
+            frame.size.width = min(frame.width, visible.width)
+            frame.size.height = min(frame.height, visible.height)
+            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
+            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
+        }
+        window.setFrame(frame, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
     }
 
     func windowWillClose(_ notification: Notification) {
         guard let window = notification.object as? NSWindow, window === dashboardWindow else { return }
-        dashboard.setPresented(.window, false)
+        dashboard.setPresented(false)
     }
 
     private func installMainMenu() {

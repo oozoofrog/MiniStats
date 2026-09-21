@@ -1,24 +1,21 @@
 import AppKit
 import SwiftUI
 
-extension DashboardView {
-    var processDetails: some View {
+extension DashboardContentView {
+    func processDetails(order: ProcessOrder) -> some View {
         VStack(alignment: .leading, spacing: 16) {
-            PixelSegmentedControl(title: "Sort by",
-                                  options: ProcessOrder.allCases.map { ($0, $0.rawValue) },
-                                  selection: $model.order)
             LCDScreen {
                 VStack(alignment: .leading, spacing: 14) {
-                    RetroSectionHeading(title: model.order == .cpu ? "CPU LOAD" : "MEMORY USED", detail: "RECENT SAMPLES")
+                    RetroSectionHeading(title: order == .cpu ? "CPU LOAD" : "MEMORY USED", detail: "RECENT SAMPLES")
                     HStack(alignment: .firstTextBaseline) {
-                        Text(model.order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
+                        Text(order == .cpu ? (model.cpu.map { String(format: "%.0f%%", $0.total) } ?? "—") : model.memory.map { bytes($0.used) } ?? "—")
                             .font(.bitmap(32))
-                        Text(model.order == .cpu ? "All cores" : "/ \(bytes(totalMemory))").font(.bitmap(12)).foregroundStyle(palette.muted)
+                        Text(order == .cpu ? "All cores" : "/ \(bytes(totalMemory))").font(.bitmap(12)).foregroundStyle(palette.muted)
                     }
-                    HistoryLine(values: model.order == .cpu ? model.cpuHistory : model.memoryHistory, color: palette.phosphor)
+                    HistoryLine(values: order == .cpu ? model.cpuHistory : model.memoryHistory, color: palette.phosphor)
                 }
             }
-            if model.order == .cpu {
+            if order == .cpu {
                 Text(model.cpu.map { String(format: "User %.1f%% · System %.1f%%", $0.user, $0.system) } ?? "Measuring…").font(.bitmap(11)).foregroundStyle(palette.muted)
                 Text(model.load).font(.bitmap(11)).foregroundStyle(palette.muted)
             } else {
@@ -30,10 +27,10 @@ extension DashboardView {
             HStack {
                 Text("Top 5").font(.bitmap(12))
                 Spacer()
-                Text(model.order == .cpu ? "CPU %" : "Memory").font(.bitmap(11)).foregroundStyle(palette.muted)
+                Text(order == .cpu ? "CPU %" : "Memory").font(.bitmap(11)).foregroundStyle(palette.muted)
             }.padding(.top, 4)
-            let rows = Array(model.order.sorted(model.processes).prefix(5))
-            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "No process information is available." : "Measuring CPU usage…").font(.bitmap(11)).foregroundStyle(palette.muted).padding(.vertical, 20) }
+            let rows = Array(order.sorted(model.processes).prefix(5))
+            if rows.isEmpty { Text(model.sampled && model.processes.isEmpty ? "No process information is available." : (order == .cpu ? "Measuring CPU usage…" : "Measuring memory usage…")).font(.bitmap(11)).foregroundStyle(palette.muted).padding(.vertical, 20) }
             ForEach(rows) { process in
                 HStack(spacing: 10) {
                     Image(systemName: "app.dashed").foregroundStyle(palette.muted).font(.system(size: 19)).accessibilityHidden(true)
@@ -42,11 +39,11 @@ extension DashboardView {
                         Text("PID \(String(process.pid))").font(.bitmap(11)).foregroundStyle(palette.muted)
                     }
                     Spacer()
-                    Text(processValue(process, order: model.order)).font(.bitmap(12))
+                    Text(processValue(process, order: order)).font(.bitmap(12))
                 }.padding(.vertical, 7)
                 RetroRule()
             }
-            Text(model.order == .cpu ? "Only processes accessible to RetroStats are shown. Process CPU 100% represents one core; using multiple cores can exceed 100%." : "Only processes accessible to RetroStats are shown. Memory uses the same basis as the Memory column in Activity Monitor.")
+            Text(order == .cpu ? "Only processes accessible to RetroStats are shown. Process CPU 100% represents one core; using multiple cores can exceed 100%." : "Only processes accessible to RetroStats are shown. Memory uses the same basis as the Memory column in Activity Monitor.")
                 .font(.bitmap(11)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
             Button("Open Activity Monitor") { openActivityMonitor() }.buttonStyle(.pixelGhost).controlSize(.small)
         }

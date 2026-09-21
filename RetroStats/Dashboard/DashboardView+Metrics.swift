@@ -1,44 +1,36 @@
 import SwiftUI
 
-extension DashboardView {
+extension DashboardContentView {
     var overview: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Button { model.order = .cpu; model.page = .processes } label: {
-                RetroProcessorPanel(model: model)
+            Button { model.page = .cpu } label: {
+                RetroProcessorPanel(model: model, compact: compact)
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Processor, view top processes")
 
-            HStack(alignment: .top, spacing: 0) {
-                Button { model.order = .memory; model.page = .processes } label: {
-                    VStack(alignment: .leading, spacing: 12) {
-                        RetroSectionHeading(title: "02 / MEMORY", detail: "↗")
-                        Text(model.memory.map { bytes($0.used) } ?? "—").font(.bitmap(22))
-                        UsageBar(percent: model.memory?.percent ?? 0, color: ink)
-                        Text(model.memory.map { String(format: "%.0f%% of %@", $0.percent, bytes(totalMemory)) } ?? "Measuring…")
-                            .font(.bitmap(11)).foregroundStyle(palette.muted)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(16).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain).accessibilityLabel("Memory, view top processes")
-                Rectangle().fill(palette.line).frame(width: 1)
-                Button { model.page = .network } label: {
-                    VStack(alignment: .leading, spacing: 12) {
-                        RetroSectionHeading(title: "03 / NETWORK", detail: "↗")
-                        Text("↓ " + model.download).font(.bitmap(20))
-                        Text("↑ " + model.upload).font(.bitmap(12))
-                        Text("Physical interfaces").font(.bitmap(11)).foregroundStyle(palette.muted)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading).padding(16).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+            let summaryLayout = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 0)) : AnyLayout(HStackLayout(alignment: .top, spacing: 0))
+            summaryLayout {
+                memorySummary
+                if compact { RetroRule() }
+                else { Rectangle().fill(palette.line).frame(width: 1) }
+                networkSummary
             }
             .fixedSize(horizontal: false, vertical: true)
             .overlay(Rectangle().strokeBorder(palette.line, lineWidth: 1))
 
-            HStack(alignment: .top, spacing: 24) {
-                topProcesses(order: .cpu)
-                topProcesses(order: .memory)
+            if compact {
+                DisclosureGroup("Top Processes", isExpanded: $showsProcesses) {
+                    VStack(alignment: .leading, spacing: 18) {
+                        topProcesses(order: .cpu)
+                        topProcesses(order: .memory)
+                    }.padding(.top, 12)
+                }.font(.bitmap(11))
+            } else {
+                HStack(alignment: .top, spacing: 24) {
+                    topProcesses(order: .cpu)
+                    topProcesses(order: .memory)
+                }
             }
 
             RetroRule()
@@ -51,7 +43,7 @@ extension DashboardView {
                             .font(.bitmap(11)).foregroundStyle(palette.muted)
                     }
                     Spacer(minLength: 4)
-                    Text("Storage ↗").font(.bitmap(11))
+                    if !compact { Text("Storage ↗").font(.bitmap(11)) }
                 }
                 .contentShape(Rectangle())
             }
@@ -62,6 +54,48 @@ extension DashboardView {
                 Button("Activity Monitor") { openActivityMonitor() }.font(.bitmap(11)).buttonStyle(.pixelGhost)
             }
         }
+    }
+
+    private var memorySummary: some View {
+        Button { model.page = .memory } label: {
+            VStack(alignment: .leading, spacing: compact ? 8 : 12) {
+                if compact {
+                    HStack {
+                        Text("MEMORY").font(.bitmap(11))
+                        Spacer(minLength: 8)
+                        Text(model.memory.map { bytes($0.used) } ?? "—").font(.bitmap(16))
+                    }
+                } else {
+                    RetroSectionHeading(title: "02 / MEMORY", detail: "↗")
+                    Text(model.memory.map { bytes($0.used) } ?? "—").font(.bitmap(22))
+                    UsageBar(percent: model.memory?.percent ?? 0, color: ink)
+                }
+                Text(model.memory.map { String(format: "%.0f%% of %@", $0.percent, bytes(totalMemory)) } ?? "Measuring…")
+                    .font(.bitmap(11)).foregroundStyle(palette.muted)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(compact ? 12 : 16).contentShape(Rectangle())
+        }
+        .buttonStyle(.plain).accessibilityLabel("Memory, view top processes")
+    }
+
+    private var networkSummary: some View {
+        Button { model.page = .network } label: {
+            VStack(alignment: .leading, spacing: compact ? 8 : 12) {
+                if compact {
+                    HStack {
+                        Text("NETWORK").font(.bitmap(11))
+                        Spacer(minLength: 8)
+                        Text("↓ " + model.download).font(.bitmap(14))
+                    }
+                } else {
+                    RetroSectionHeading(title: "03 / NETWORK", detail: "↗")
+                    Text("↓ " + model.download).font(.bitmap(20))
+                }
+                Text("↑ " + model.upload).font(.bitmap(12))
+                if !compact { Text("Physical interfaces").font(.bitmap(11)).foregroundStyle(palette.muted) }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(compact ? 12 : 16).contentShape(Rectangle())
+        }.buttonStyle(.plain)
     }
 
     private func topProcesses(order: ProcessOrder) -> some View {
@@ -102,7 +136,7 @@ extension DashboardView {
                 RetroSectionHeading(title: title, detail: "TRANSFER RATE")
                 HStack(spacing: 16) {
                     Image(systemName: icon).font(.system(size: 24)).accessibilityHidden(true)
-                    Text(value).font(.bitmap(32))
+                    Text(value).font(.bitmap(compact ? 24 : 32))
                     Spacer(minLength: 0)
                 }
             }

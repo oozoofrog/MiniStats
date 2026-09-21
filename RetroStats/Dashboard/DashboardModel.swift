@@ -4,7 +4,6 @@ import ServiceManagement
 
 final class DashboardModel: ObservableObject {
     @Published var page: DashboardPage = .overview
-    @Published var order: ProcessOrder = .cpu
     @Published var cpu: CPULoad?
     @Published var memory: MemoryUsage?
     @Published var download = "—"
@@ -52,19 +51,14 @@ final class DashboardModel: ObservableObject {
     private var generation = 0
     private var active = false
     private var pendingGeneration: Int?
-    private var presentations: Set<DashboardPresentation> = []
-
-    /// Handoffs between the popover and window must not reset process sampling.
-    func setPresented(_ presentation: DashboardPresentation, _ visible: Bool) {
-        let wasPresented = !presentations.isEmpty
-        if visible { presentations.insert(presentation) }
-        else { presentations.remove(presentation) }
-        if !wasPresented && !presentations.isEmpty { begin() }
-        else if wasPresented && presentations.isEmpty { end() }
+    /// Resizing or reopening the same surface must not reset process sampling.
+    func setPresented(_ visible: Bool) {
+        guard active != visible else { return }
+        if visible { begin() } else { end() }
     }
 
     func resumeIfPresented() {
-        if !presentations.isEmpty { begin() }
+        if active { begin() }
     }
 
     func begin() {
@@ -125,5 +119,4 @@ final class DashboardModel: ObservableObject {
     }
 }
 
-enum DashboardPage { case overview, processes, network, storage, settings }
-enum DashboardPresentation { case popover, window }
+enum DashboardPage { case overview, cpu, memory, network, storage, settings }

@@ -22,17 +22,18 @@ import SwiftUI
     model.sampled = true
     model.refreshContext()
     for (scheme, name) in [(ColorScheme.light, "light"), (.dark, "dark")] {
-        for (page, order, suffix) in [(DashboardPage.overview, ProcessOrder.cpu, "overview"), (.processes, .cpu, "cpu"), (.processes, .memory, "memory"), (.network, .cpu, "network"), (.storage, .cpu, "storage"), (.settings, .cpu, "settings")] {
-            model.page = page
-            model.order = order
-            let content = DashboardView(model: model, renderOnly: true)
-                .frame(width: RetroLayout.dashboardSize.width, height: page == .overview || page == .network ? 860 : 1040)
-                .environment(\.colorScheme, scheme)
-            try render(content, to: directory.appendingPathComponent("\(name)-\(suffix).png"))
+        for (width, layout) in [(CGFloat(360), "minimum"), (CGFloat(400), "compact"), (CGFloat(840), "wide")] {
+            for (page, suffix) in [(DashboardPage.overview, "overview"), (.cpu, "cpu"), (.memory, "memory"), (.network, "network"), (.storage, "storage"), (.settings, "settings")] {
+                model.page = page
+                let height: CGFloat = width < RetroLayout.sidebarBreakpoint
+                    ? (page == .overview ? 760 : 1260)
+                    : (page == .overview || page == .network ? 860 : 1040)
+                let content = DashboardView(model: model, renderOnly: true)
+                    .frame(width: width, height: height)
+                    .environment(\.colorScheme, scheme)
+                try render(content, to: directory.appendingPathComponent("\(name)-\(layout)-\(suffix).png"))
+            }
         }
-        let popover = MenuPopoverView(model: model, renderOnly: true, openDashboard: { _, _ in })
-            .environment(\.colorScheme, scheme)
-        try render(popover, to: directory.appendingPathComponent("\(name)-popover.png"))
     }
 }
 

@@ -8,7 +8,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 for tool in xcodebuild xcrun sips codesign plutil lipo make; do
     command -v "$tool" >/dev/null 2>&1 || fail "Missing tool: $tool"
 done
-for input in RetroStats/App/main.swift RetroStats/PixelUI/Popover.swift RetroStats/App/AppDelegate.swift RetroStats/Storage/StorageController.swift RetroStats/Dashboard/DashboardView.swift RetroStats/Bridging.h RetroStats/Info.plist RetroStats.xcodeproj/project.pbxproj assets/AppIcon.png; do
+for input in RetroStats/App/main.swift RetroStats/PixelUI/RetroTheme.swift RetroStats/App/AppDelegate.swift RetroStats/Storage/StorageController.swift RetroStats/Dashboard/DashboardView.swift RetroStats/Bridging.h RetroStats/Info.plist RetroStats.xcodeproj/project.pbxproj assets/AppIcon.png; do
     [ -f "$input" ] || fail "Missing build input: $input"
 done
 printf 'Developer directory: %s\n' "$(xcode-select -p)"

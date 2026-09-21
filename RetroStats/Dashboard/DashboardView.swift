@@ -4,6 +4,25 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var model: DashboardModel
     var renderOnly = false
+    var toggleSize: (() -> Void)?
+
+    var body: some View {
+        GeometryReader { geometry in
+            DashboardContentView(model: model, renderOnly: renderOnly, toggleSize: toggleSize)
+                .environment(\.retroCompact, geometry.size.width < RetroLayout.sidebarBreakpoint)
+        }
+        .frame(minWidth: RetroLayout.dashboardMinimum.width, minHeight: RetroLayout.dashboardMinimum.height)
+        .ignoresSafeArea(.container, edges: .top)
+    }
+}
+
+/// One stable view identity owns selection at every width.
+struct DashboardContentView: View {
+    @ObservedObject var model: DashboardModel
+    var renderOnly = false
+    var toggleSize: (() -> Void)?
+    @Environment(\.retroCompact) var compact
+    @State var showsProcesses = false
     @State var selection: Set<String> = []
     @Environment(\.colorScheme) private var scheme
 
@@ -16,9 +35,24 @@ struct DashboardView: View {
     var body: some View {
         VStack(spacing: 0) {
             RetroTitleBar(reservesWindowControls: !renderOnly)
+                .padding(.trailing, toggleSize == nil ? 0 : 32)
+                .overlay(alignment: .trailing) {
+                    if let toggleSize {
+                        Button(action: toggleSize) {
+                            Image(systemName: compact ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
+                                .font(.system(size: 12)).frame(width: 32, height: 32)
+                        }
+                        .buttonStyle(.plain)
+                        .help(compact ? "Expand this window" : "Compact this window")
+                        .accessibilityLabel(compact ? "Expand this window" : "Compact this window")
+                    }
+                }
+            if compact { compactNavigation }
             HStack(spacing: 0) {
-                sidebar
-                Rectangle().fill(palette.line).frame(width: 1)
+                if !compact {
+                    sidebar
+                    Rectangle().fill(palette.line).frame(width: 1)
+                }
                 if renderOnly {
                     dashboardPanel(for: model.page)
                 } else {
@@ -37,17 +71,31 @@ struct DashboardView: View {
         .background(palette.paper)
         .environment(\.retroPalette, palette)
         .tint(ink)
-        .frame(minWidth: RetroLayout.dashboardMinimum.width, minHeight: RetroLayout.dashboardMinimum.height)
-        .ignoresSafeArea(.container, edges: .top)
         .onChange(of: candidatePaths) { _, paths in selection.formIntersection(paths) }
+    }
+
+    private var compactNavigation: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 2), count: 3), spacing: 2) {
+            navigation("Home", icon: "square.grid.2x2", page: .overview)
+            navigation("CPU", icon: "cpu", page: .cpu)
+            navigation("Memory", icon: "memorychip", page: .memory)
+            navigation("Network", icon: "network", page: .network)
+            navigation("Storage", icon: "internaldrive", page: .storage)
+            navigation("Settings", icon: "slider.horizontal.3", page: .settings)
+        }
+        .padding(6)
+        .background(palette.base)
+        .overlay(alignment: .bottom) { RetroRule() }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Main navigation")
     }
 
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 4) {
             sidebarCaption("MONITOR")
             navigation("Overview", icon: "square.grid.2x2", page: .overview)
-            navigation("Processor", icon: "cpu", page: .processes, order: .cpu)
-            navigation("Memory", icon: "memorychip", page: .processes, order: .memory)
+            navigation("CPU", icon: "cpu", page: .cpu)
+            navigation("Memory", icon: "memorychip", page: .memory)
             navigation("Network", icon: "network", page: .network)
             sidebarCaption("MANAGE").padding(.top, 22)
             navigation("Storage", icon: "internaldrive", page: .storage)
@@ -74,10 +122,9 @@ struct DashboardView: View {
         Text(text).font(.bitmap(11)).foregroundStyle(palette.muted).padding(.horizontal, 10).padding(.bottom, 6)
     }
 
-    private func navigation(_ title: String, icon: String, page: DashboardPage, order: ProcessOrder? = nil) -> some View {
-        let selected = model.page == page && (order == nil || model.order == order)
+    private func navigation(_ title: String, icon: String, page: DashboardPage) -> some View {
+        let selected = model.page == page
         return Button {
-            if let order { model.order = order }
             if page == .settings { model.refreshContext() }
             model.page = page
         } label: {
@@ -86,7 +133,7 @@ struct DashboardView: View {
                 Text(title).font(.bitmap(11))
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 9).padding(.vertical, 10)
+            .padding(.horizontal, compact ? 5 : 9).padding(.vertical, compact ? 8 : 10)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -105,7 +152,7 @@ struct DashboardView: View {
             }
             if page == .storage {
                 RetroRule()
-                storageActionBar.padding(20).background(palette.base)
+                storageActionBar.padding(compact ? 12 : 20).background(palette.base)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -116,12 +163,15 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 20) {
             switch page {
             case .overview:
-                RetroPageHeading(eyebrow: "SYSTEM MONITOR", title: "A little order.\nAt a glance.", stamp: "RETRO\nSTATS")
+                if compact { RetroSectionHeading(title: "SYSTEM MONITOR", detail: "LIVE") }
+                else { RetroPageHeading(eyebrow: "SYSTEM MONITOR", title: "A little order.\nAt a glance.", stamp: "RETRO\nSTATS") }
                 overview
-            case .processes:
-                RetroPageHeading(eyebrow: model.order == .cpu ? "01 / PROCESSOR" : "02 / MEMORY",
-                                 title: model.order == .cpu ? "Processor" : "Memory", stamp: "LIVE\nMETER")
-                processDetails
+            case .cpu:
+                RetroPageHeading(eyebrow: "01 / PROCESSOR", title: "CPU", stamp: "LIVE\nMETER")
+                processDetails(order: .cpu)
+            case .memory:
+                RetroPageHeading(eyebrow: "02 / MEMORY", title: "Memory", stamp: "LIVE\nMETER")
+                processDetails(order: .memory)
             case .network:
                 RetroPageHeading(eyebrow: "03 / NETWORK", title: "Coming and going.", stamp: "DATA\nI/O")
                 networkDetails
@@ -133,7 +183,7 @@ struct DashboardView: View {
                 settings
             }
         }
-        .padding(24)
+        .padding(compact ? 16 : 24)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 

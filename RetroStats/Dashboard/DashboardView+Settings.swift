@@ -1,7 +1,7 @@
 import ServiceManagement
 import SwiftUI
 
-extension DashboardView {
+extension DashboardContentView {
     var settings: some View {
         VStack(alignment: .leading, spacing: 18) {
             settingsGroup("APPEARANCE") {
@@ -39,9 +39,10 @@ extension DashboardView {
                 .font(.bitmap(11)).foregroundStyle(palette.muted)
             Text("Follows macOS Light/Dark Mode. Pixel text and opaque panels stay enabled for every finish.")
                 .font(.bitmap(11)).foregroundStyle(palette.muted)
-            HStack {
+            let actions = compact ? AnyLayout(VStackLayout(alignment: .leading, spacing: 12)) : AnyLayout(HStackLayout(spacing: 12))
+            actions {
                 Button("Open Activity Monitor") { openActivityMonitor() }.buttonStyle(.pixelGhost)
-                Spacer(minLength: 8)
+                if !compact { Spacer(minLength: 8) }
                 Button("Quit RetroStats") { model.quit?() }.buttonStyle(.pixel).disabled(storage?.cleaning == true)
             }.font(.bitmap(11))
         }

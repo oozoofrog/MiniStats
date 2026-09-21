@@ -8,7 +8,7 @@ func transitionSelfTest() {
     var pages = TransitionPages(initial: .overview)
     precondition(pages.request(.storage))
     precondition(pages.previous == .overview && pages.visible == .storage)
-    precondition(!pages.request(.processes))
+    precondition(!pages.request(.cpu))
     precondition(!pages.request(.settings))
     precondition(pages.visible == .storage && pages.requested == .settings)
     pages.finish()
@@ -25,6 +25,20 @@ func transitionSelfTest() {
     precondition(!pages.request(.storage))
     pages.finish()
     precondition(!pages.beginPending() && pages.visible == .storage)
+
+    // CPU and Memory are separate targets; a rapid return must not replace
+    // the incoming metric page while its transition is still running.
+    pages = TransitionPages(initial: .cpu)
+    precondition(pages.request(.memory))
+    precondition(pages.previous == .cpu && pages.visible == .memory)
+    precondition(!pages.request(.cpu))
+    precondition(pages.visible == .memory && pages.requested == .cpu)
+    pages.finish()
+    precondition(pages.beginPending())
+    precondition(pages.previous == .memory && pages.visible == .cpu)
+    pages.finish()
+    precondition(!pages.beginPending())
+    print("PASS: independent CPU/Memory page transitions and rapid-return queue")
 
     // Both masks must cover their exact endpoints for every seed, including
     // the old fixed seed 0. Check a non-grid-aligned height as well.

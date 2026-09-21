@@ -5,16 +5,19 @@ import SwiftUI
 final class DashboardSurfaceController: NSViewController {
     private let model: DashboardModel
 
-    init(model: DashboardModel) {
+    private let toggleSize: () -> Void
+
+    init(model: DashboardModel, toggleSize: @escaping () -> Void) {
         self.model = model
+        self.toggleSize = toggleSize
         super.init(nibName: nil, bundle: nil)
     }
 
     required init?(coder: NSCoder) { nil }
 
     override func loadView() {
-        let host = NSHostingView(rootView: DashboardView(model: model))
-        host.frame = NSRect(origin: .zero, size: RetroLayout.dashboardSize)
+        let host = NSHostingView(rootView: DashboardView(model: model, toggleSize: toggleSize))
+        host.frame = NSRect(origin: .zero, size: RetroLayout.compactSize)
         view = host
     }
 }

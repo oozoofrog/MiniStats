@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-extension DashboardView {
+extension DashboardContentView {
     var storageDetails: some View {
         VStack(alignment: .leading, spacing: 14) {
             if let disk = storage?.disk {
