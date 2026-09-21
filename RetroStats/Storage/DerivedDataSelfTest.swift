@@ -130,3 +130,18 @@ func derivedDataSelfTest() async throws {
 
     print("PASS: DerivedData inspect/eligibility, report, selected-only deletion, recheck-keeps, shared cleanup, hours cutoff, symlink safety, broken-plist abort")
 }
+
+/// `--bench-cleanup [items]`: times the clean loop over synthetic paths with the
+/// filesystem stubbed out (recheck returns a stale cache, remove is a no-op),
+/// so only the per-item orchestration and event delivery are measured.
+func derivedDataBenchmark(items: Int) async throws {
+    let cleaner = DerivedDataCleaner()
+    let paths = (0..<items).map { "/bench/DerivedData/Cache-\($0)" }
+    let stale = { (path: String) in DerivedDataCleaner.Inspected(path: path, size: 1024, latest: 0, kind: .project, workspace: "") }
+    var events = 0
+    let elapsed = try await ContinuousClock().measure {
+        try await cleaner.clean(paths: paths, hours: 8, includeShared: false, idleCheck: {}, recheck: stale, remove: { _ in }) { _ in events += 1 }
+    }
+    precondition(events == items + 1, "one event per item plus done")
+    print("BENCH clean loop items=\(items) total=\(elapsed) per-item=\(elapsed / items)")
+}

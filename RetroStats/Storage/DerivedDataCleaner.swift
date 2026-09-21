@@ -49,25 +49,33 @@ struct DerivedDataCleaner {
         return buildReport(items: items, now: now, hours: hours, cutoff: cutoff, includeShared: includeShared)
     }
 
-    /// Delete the given paths after re-inspecting each. Emits progress events.
-    /// Sequential per item (each delete re-validates idleness and eligibility);
-    /// cancellation is honored between items.
+    /// Re-inspect every path concurrently (read-only), then delete eligible ones
+    /// sequentially. Idleness and cancellation are re-validated before each delete.
     func clean(paths: [String], hours: Int, includeShared: Bool,
                idleCheck: () throws -> Void = DerivedDataCleaner.ensureIdle,
+               recheck: (@Sendable (String) throws -> Inspected)? = nil,
+               remove: (String) throws -> Void = { try FileManager.default.removeItem(atPath: $0) },
                progress: @escaping @Sendable (CleanEvent) -> Void) async throws {
         let cutoff = Date().timeIntervalSince1970 - Double(hours) * 3600
+        let recheck = recheck ?? { path in try verifySafeDeletePath(path); return try inspect(path: path) }
+        // ponytail: rechecks finish before the first delete, so a cache touched while
+        // earlier items are being removed is not caught; go back to per-item inspect if that matters.
+        let fresh = try await withThrowingTaskGroup(of: Inspected.self) { group in
+            for path in paths { group.addTask { try recheck(path) } }
+            var byPath: [String: Inspected] = [:]
+            for try await item in group { byPath[item.path] = item }
+            return byPath
+        }
         var removed = 0
         var freed: Int64 = 0
         for path in paths {
             try Task.checkCancellation()
             try idleCheck()
-            try verifySafeDeletePath(path)
-            let fresh = try inspect(path: path)
-            if eligible(fresh, cutoff: cutoff, includeShared: includeShared) {
-                try FileManager.default.removeItem(atPath: path)
+            if let item = fresh[path], eligible(item, cutoff: cutoff, includeShared: includeShared) {
+                try remove(path)
                 removed += 1
-                freed += fresh.size
-                progress(.deleted(path: path, size: fresh.size))
+                freed += item.size
+                progress(.deleted(path: path, size: item.size))
             } else {
                 progress(.kept(path: path))
             }
