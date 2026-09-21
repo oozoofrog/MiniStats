@@ -1,7 +1,8 @@
 import AppKit
 import UserNotifications
 
-final class StorageController: NSObject, UNUserNotificationCenterDelegate {
+/// All state changes hop to the main queue, so captures from cleaner callbacks are safe.
+final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
     private(set) var disk: DiskUsage?
     private(set) var cleaning = false
     private(set) var report: CacheReport?

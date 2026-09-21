@@ -31,8 +31,16 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
 } else if let index = CommandLine.arguments.firstIndex(of: "--bench-cleanup") {
     let items = CommandLine.arguments.dropFirst(index + 1).first.flatMap(Int.init) ?? 100_000
     let sem = DispatchSemaphore(value: 0)
-    Task { try await derivedDataBenchmark(items: items); sem.signal() }
+    var benchError: Error?
+    Task {
+        do { try await derivedDataBenchmark(items: items) } catch { benchError = error }
+        sem.signal()
+    }
     sem.wait()
+    if let benchError {
+        FileHandle.standardError.write(Data(("BENCH FAILED: " + String(describing: benchError) + "\n").utf8))
+        exit(1)
+    }
     exit(0)
 } else if let index = CommandLine.arguments.firstIndex(of: "--render-dashboard"), CommandLine.arguments.count > index + 1 {
     try MainActor.assumeIsolated { try renderDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }

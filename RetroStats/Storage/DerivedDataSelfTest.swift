@@ -1,4 +1,5 @@
 import Foundation
+import Synchronization
 
 /// Native regression tests for DerivedDataCleaner, porting the behavioral
 /// cases from the former tests/test_deriveddata.py. Runs only on --self-test
@@ -94,18 +95,18 @@ func derivedDataSelfTest() async throws {
     precondition(candidatePaths == Set([stale, past8, logsOnly]))
 
     // Selected-only deletion: delete only `stale`, keep `logsOnly` and `past8`.
-    var events: [CleanEvent] = []
-    try await cleaner.clean(paths: [stale], hours: 8, includeShared: false, idleCheck: {}) { events.append($0) }
+    let events = Mutex<[CleanEvent]>([])
+    try await cleaner.clean(paths: [stale], hours: 8, includeShared: false, idleCheck: {}) { event in events.withLock { $0.append(event) } }
     precondition(!FileManager.default.fileExists(atPath: stale))
     precondition(FileManager.default.fileExists(atPath: logsOnly))
-    precondition(events.contains { if case .deleted(let p, _) = $0 { return p == stale } else { return false } })
+    precondition(events.withLock { $0 }.contains { if case .deleted(let p, _) = $0 { return p == stale } else { return false } })
 
     // Recheck-keeps: a selected path whose mtime became recent is kept, not deleted.
     try FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: (logsOnly as NSString).appendingPathComponent("Logs"))
-    events.removeAll()
-    try await cleaner.clean(paths: [logsOnly], hours: 8, includeShared: false, idleCheck: {}) { events.append($0) }
+    events.withLock { $0.removeAll() }
+    try await cleaner.clean(paths: [logsOnly], hours: 8, includeShared: false, idleCheck: {}) { event in events.withLock { $0.append(event) } }
     precondition(FileManager.default.fileExists(atPath: logsOnly))
-    precondition(events.contains { if case .kept(let p) = $0 { return p == logsOnly } else { return false } })
+    precondition(events.withLock { $0 }.contains { if case .kept(let p) = $0 { return p == logsOnly } else { return false } })
 
     // Shared cleanup: include-shared removes the old shared cache.
     try await cleaner.clean(paths: [shared], hours: 8, includeShared: true, idleCheck: {}) { _ in }
@@ -137,11 +138,13 @@ func derivedDataSelfTest() async throws {
 func derivedDataBenchmark(items: Int) async throws {
     let cleaner = DerivedDataCleaner()
     let paths = (0..<items).map { "/bench/DerivedData/Cache-\($0)" }
-    let stale = { (path: String) in DerivedDataCleaner.Inspected(path: path, size: 1024, latest: 0, kind: .project, workspace: "") }
-    var events = 0
-    let elapsed = try await ContinuousClock().measure {
-        try await cleaner.clean(paths: paths, hours: 8, includeShared: false, idleCheck: {}, recheck: stale, remove: { _ in }) { _ in events += 1 }
+    let stale: @Sendable (String) -> DerivedDataCleaner.Inspected = { path in
+        DerivedDataCleaner.Inspected(path: path, size: 1024, latest: 0, kind: .project, workspace: "")
     }
-    precondition(events == items + 1, "one event per item plus done")
+    let events = Mutex(0)
+    let elapsed = try await ContinuousClock().measure {
+        try await cleaner.clean(paths: paths, hours: 8, includeShared: false, idleCheck: {}, recheck: stale, remove: { _ in }) { _ in events.withLock { $0 += 1 } }
+    }
+    precondition(events.withLock { $0 } == items + 1, "one event per item plus done")
     print("BENCH clean loop items=\(items) total=\(elapsed) per-item=\(elapsed / items)")
 }
