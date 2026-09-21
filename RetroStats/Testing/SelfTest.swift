@@ -32,9 +32,23 @@ private func bitmapMask(_ bitmap: NSBitmapImageRep, x: Range<Int>, y: Range<Int>
     return BitmapMask(width: width, height: height, pixels: pixels)
 }
 
+/// `precondition` messages are stripped from release builds, so bitmap failures
+/// print their mask diff to stderr before trapping.
+private func rows(_ m: BitmapMask) -> [String] {
+    (0..<m.height).map { r in (0..<m.width).map { m.pixels[r * m.width + $0] ? "#" : "." }.joined() }
+}
+
+private func requireEqual(_ a: BitmapMask, _ b: BitmapMask, _ message: String) {
+    guard a != b else { return }
+    var text = "\(message)\n\(a.width)x\(a.height) vs \(b.width)x\(b.height)\n"
+    for (x, y) in zip(rows(a), rows(b)) { text += "\(x)  \(y)\n" }
+    FileHandle.standardError.write(Data(text.utf8))
+    preconditionFailure(message)
+}
+
 @MainActor func bitmapTextSelfTest() {
     _ = NSApplication.shared
-    let samples: [(String, CGFloat)] = [("i", 0.6), ("W", 0.6), ("8", 0.6), ("한", 0.8), ("글", 0.8)]
+    let samples: [(String, CGFloat)] = [("i", 0.6), ("W", 0.6), ("8", 0.6), ("|", 0.6), ("한", 0.9), ("글", 0.9)]
     let styles: [(String, HierarchicalShapeStyle)] = [("primary", .primary), ("secondary", .secondary)]
     for (styleName, style) in styles {
         for scale in [1.0, 2.0] {
@@ -57,33 +71,41 @@ private func bitmapMask(_ bitmap: NSBitmapImageRep, x: Range<Int>, y: Range<Int>
                     }
                     let bitmap = render(0)
                     let advance = size * advanceRatio * scale
+                    let hangul = advanceRatio > 0.7
+                    let cellPx = BitmapTextRenderer.snappedCell(size * (hangul ? 0.07 : 0.1), advance: size * advanceRatio, ascent: size * 0.9, cells: hangul ? 11 : 7, displayScale: scale) * scale
+                    // A 1px cell can still overflow a tiny 1x advance; neighbours then share columns.
+                    let overflows = (hangul ? 11 : 5) * cellPx > advance + 0.001
                     var reference: BitmapMask?
                     for index in 0..<20 {
                         let start = Int((CGFloat(index) * advance).rounded())
                         let end = Int((CGFloat(index + 1) * advance).rounded())
                         let mask = bitmapMask(bitmap, x: start..<end, y: 0..<Int(50 * scale))
                         precondition(mask.width > 0 && mask.height > 0, "Missing bitmap glyph: \(character)")
-                        if let reference {
-                            precondition(mask == reference,
-                                         "Bitmap glyph changes with position: \(character), \(size)pt at \(scale)x (\(styleName))")
+                        if let reference, !overflows {
+                            requireEqual(reference, mask, "Bitmap glyph changes with position: \(character), \(size)pt at \(scale)x (\(styleName)), glyph \(index)")
                         } else {
                             reference = mask
                         }
+                    }
+                    if character == "|", let reference {
+                        // "|" is a single 7-cell column: its mask is exactly one snapped cell wide.
+                        precondition(CGFloat(reference.width) == cellPx && CGFloat(reference.height) == 7 * cellPx,
+                                     "Stroke thickness \(reference.width)x\(reference.height) is not \(cellPx)px at \(size)pt \(scale)x")
                     }
                     if size == 13 && (character == "i" || character == "한") {
                         let fullWidth = Int(400 * scale)
                         let fullHeight = Int(50 * scale)
                         let baseline = bitmapMask(bitmap, x: 0..<fullWidth, y: 0..<fullHeight)
                         for offset in [0.25, 0.5, 0.75] {
-                            precondition(bitmapMask(render(offset), x: 0..<fullWidth, y: 0..<fullHeight) == baseline,
-                                         "Bitmap text changes when moved: \(character), \(scale)x (\(styleName))")
+                            requireEqual(baseline, bitmapMask(render(offset), x: 0..<fullWidth, y: 0..<fullHeight),
+                                         "Bitmap text changes when moved: \(character), \(scale)x (\(styleName)), offset \(offset)")
                         }
                     }
                 }
             }
         }
     }
-    print("PASS: bitmap glyph shape and text translation at 1x/2x, primary/secondary")
+    print("PASS: bitmap glyph shape, uniform stroke thickness, and text translation at 1x/2x, primary/secondary")
 }
 
 func selfTest() {

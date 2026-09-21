@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Build RetroBitmapA.ttf from its authored 5x7 character bitmaps.
 
-Regeneration only: python3 -m pip install --target build/fonttools fonttools==4.65.0
+Regeneration only: python3 -m pip install --target build/fonttools fonttools
 Then: PYTHONPATH=build/fonttools python3 scripts/generate_bitmap_font.py
 The generated TTF is a versioned resource; normal app builds need no Python package.
 """
@@ -173,11 +173,11 @@ def main() -> None:
     font.setupGlyf(glyphs)
     glyf = font.font["glyf"]
     font.setupHorizontalMetrics({
-        name: (0 if name == ".null" else 800 if name in {names[ch] for ch in HANGUL} else 600,
+        name: (0 if name == ".null" else 900 if name in {names[ch] for ch in HANGUL} else 600,
                getattr(glyf[name], "xMin", 0))
         for name in order
     })
-    font.setupHorizontalHeader(ascent=800, descent=-200)
+    font.setupHorizontalHeader(ascent=900, descent=-200)  # 900 leaves room for cells snapped up to whole pixels
     family = "RetroBitmapA"
     font.setupNameTable({
         "familyName": family,
@@ -187,7 +187,7 @@ def main() -> None:
         "psName": "RetroBitmapA-Regular",
         "version": "Version 1.0",
     })
-    font.setupOS2(sTypoAscender=800, sTypoDescender=-200, usWinAscent=800,
+    font.setupOS2(sTypoAscender=900, sTypoDescender=-200, usWinAscent=900,
                   usWinDescent=200, sCapHeight=700, sxHeight=600, xAvgCharWidth=600)
     font.setupPost(isFixedPitch=1)
     font.font.recalcTimestamp = False
