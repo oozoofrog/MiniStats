@@ -114,6 +114,7 @@ struct PixelSegmentedControl<Value: Hashable>: View {
                     Text(option.label)
                         .font(.bitmap(11))
                         .textRenderer(BitmapTextRenderer())
+                        .tracking(1)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 5)
                         .contentShape(Rectangle())

@@ -12,6 +12,7 @@ private struct BitmapStatusText: View {
             .multilineTextAlignment(.center)
             .frame(width: 26)
             .textRenderer(BitmapTextRenderer())
+            .tracking(1)
     }
 }
 

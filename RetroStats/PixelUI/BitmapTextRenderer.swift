@@ -57,6 +57,7 @@ struct BitmapTextRenderer: TextRenderer {
         Text("/Users/개발자/My App/📁").font(.bitmap(11))
     }
     .textRenderer(BitmapTextRenderer())
+    .tracking(1)
     .padding(12)
 }
 
@@ -82,6 +83,7 @@ struct BitmapTextRenderer: TextRenderer {
         .padding(16)
     }
     .textRenderer(BitmapTextRenderer())
+    .tracking(1)
     .frame(width: 520, height: 900)
 }
 #endif

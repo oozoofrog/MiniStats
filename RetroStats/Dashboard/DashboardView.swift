@@ -20,6 +20,7 @@ struct DashboardView: View {
         }
         .font(.bitmap(13))
         .textRenderer(BitmapTextRenderer())
+        .tracking(1)
         .frame(width: 400, height: 600)
         .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         .onChange(of: candidatePaths) { _, newPaths in

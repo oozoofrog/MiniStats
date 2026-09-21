@@ -43,6 +43,7 @@ struct TransitionPreview: View {
         .padding(16)
         .background(Color(.windowBackgroundColor))
         .textRenderer(BitmapTextRenderer())
+        .tracking(1)
         .onAppear { startTimerIfNeeded() }
         .onDisappear { timer?.invalidate() }
         .onChange(of: speed) { _, _ in startTimerIfNeeded() }
