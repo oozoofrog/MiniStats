@@ -403,6 +403,12 @@ struct DashboardView: View {
                                       options: TransitionSpeed.allCases.map { ($0, $0.label) },
                                       selection: $model.transitionSpeed)
             }
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Text Size").font(.bitmap(12))
+                PixelSegmentedControl(title: "Text Size",
+                                      options: FontScale.allCases.map { ($0, $0.label) },
+                                      selection: $model.fontScale)
+            }
             Divider()
             Button("Configure Storage Alerts…") { storage?.openNotificationSettings() }
             Button("Open DerivedData Folder") { storage?.openFolder() }

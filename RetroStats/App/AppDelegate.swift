@@ -3,16 +3,26 @@ import Darwin
 import ServiceManagement
 import SwiftUI
 
+/// Two-line CPU/MEM readout. "100%" does not fit the 26pt column, so a full
+/// value shows the PixelMax icon instead of a number.
 private struct BitmapStatusText: View {
-    let value: String
+    let cpu: Double?
+    let memory: Double?
 
     var body: some View {
-        Text(value)
-            .font(.bitmap(9))
-            .multilineTextAlignment(.center)
-            .frame(width: 26)
-            .textRenderer(BitmapTextRenderer())
-            .tracking(1)
+        VStack(spacing: 1) {
+            row(cpu)
+            row(memory)
+        }
+        .font(.bitmap(9, scaled: false))
+        .frame(width: 26)
+        .textRenderer(BitmapTextRenderer())
+        .tracking(1)
+    }
+
+    @ViewBuilder private func row(_ value: Double?) -> some View {
+        if let value, value.rounded() >= 100 { PixelMax(size: 9) }
+        else { Text(value.map { String(format: "%.0f%%", $0) } ?? "—") }
     }
 }
 
@@ -20,7 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
     private let dashboard = DashboardModel()
     private let popover = TransparentPopover()
     private let status = NSStatusBar.system.statusItem(withLength: 38)
-    private let readout = NSHostingView(rootView: BitmapStatusText(value: "—\n—"))
+    private let readout = NSHostingView(rootView: BitmapStatusText(cpu: nil, memory: nil))
     private let warningIcon = NSImageView()
     private var timer: Timer?
     private var storage: StorageController?
@@ -82,9 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSPopoverDelegate {
         let cpu = previousCPU.flatMap { old in currentCPU.flatMap { cpuLoad(old, $0) } }
         previousCPU = currentCPU
         let memory = memoryUsage()
-        let cpuLabel = cpu.map { String(format: "%.0f%%", $0.total) } ?? "—"
-        let memoryLabel = memory.map { String(format: "%.0f%%", $0.percent) } ?? "—"
-        readout.rootView = BitmapStatusText(value: "\(cpuLabel)\n\(memoryLabel)")
+        readout.rootView = BitmapStatusText(cpu: cpu?.total, memory: memory?.percent)
         let now = ProcessInfo.processInfo.systemUptime
         let currentNetwork = networkCounters()
         let rates = previousNetwork.flatMap { old in currentNetwork.flatMap { networkRate(old, $0, seconds: now - previousTime) } }
@@ -192,3 +200,16 @@ func diagnostic(_ message: String) {
 final class StatusReadout: NSStackView {
     override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
+
+#if DEBUG
+#Preview("Menu Bar Readout") {
+    HStack(spacing: 24) {
+        BitmapStatusText(cpu: nil, memory: nil)
+        BitmapStatusText(cpu: 7, memory: 43)
+        BitmapStatusText(cpu: 99.6, memory: 62)
+        BitmapStatusText(cpu: 100, memory: 100)
+    }
+    .padding(12)
+    .frame(height: 22)
+}
+#endif

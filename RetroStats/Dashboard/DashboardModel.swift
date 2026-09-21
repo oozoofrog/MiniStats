@@ -25,6 +25,12 @@ final class DashboardModel: ObservableObject {
     @Published var transitionSpeed: TransitionSpeed {
         didSet { UserDefaults.standard.set(transitionSpeed.rawValue, forKey: Self.transitionSpeedKey) }
     }
+    @Published var fontScale = FontScale.current {
+        didSet {
+            FontScale.current = fontScale
+            UserDefaults.standard.set(fontScale.rawValue, forKey: FontScale.key)
+        }
+    }
     var storage: StorageController?
     var toggleLogin: (() -> Void)?
     var quit: (() -> Void)?

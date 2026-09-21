@@ -45,6 +45,24 @@ struct PixelLED: View {
     }()
 }
 
+// MARK: - PixelMax
+
+/// Three rising bars, fully lit: the menu bar's "100%" glyph.
+struct PixelMax: View {
+    var size: CGFloat = 16
+    var color: Color = .primary
+    var body: some View {
+        PixelCells(cells: Self.cells, color: color, size: size)
+    }
+    static let cells: [(Int, Int)] = {
+        var c: [(Int, Int)] = []
+        for (bar, height) in [(1, 5), (6, 10), (11, 15)] {
+            for i in bar..<(bar + 4) { for j in (15 - height)...15 { c.append((i, j)) } }
+        }
+        return c
+    }()
+}
+
 // MARK: - PixelSliders
 
 /// Three horizontal sliders with handles, replacing the gear as the settings glyph.
@@ -219,6 +237,16 @@ struct PixelHourglass: View {
         PixelLED(size: 10, color: .primary)
         PixelLED(size: 16, color: .primary)
         PixelLED(size: 24, color: .accentColor)
+    }
+    .padding(40)
+    .frame(width: 200, height: 220)
+}
+
+#Preview("PixelMax") {
+    VStack(spacing: 20) {
+        PixelMax(size: 9, color: .primary)
+        PixelMax(size: 16, color: .primary)
+        PixelMax(size: 32, color: .accentColor)
     }
     .padding(40)
     .frame(width: 200, height: 220)
