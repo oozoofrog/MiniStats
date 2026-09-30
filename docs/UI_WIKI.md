@@ -25,7 +25,7 @@
 
 ## Footer
 
-`SYSTEM MONITOR`와 `UPDATES EVERY 3 SEC`를 표시한다. 코어·메모리 사양은 넓은 화면의 사이드바에 표시한다.
+`SYSTEM MONITOR`와 현재 설정값을 포함한 `UPDATE n.n SEC`를 표시한다. 코어·메모리 사양은 넓은 화면의 사이드바에 표시한다.
 
 ## Overview 페이지 (`overview`)
 
@@ -186,4 +186,4 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | `PixelToggleStyle` | PixelControls.swift | `.pixelToggle` 토글 스타일 |
 | `DashboardContentView` | DashboardView.swift | 폭에 맞춰 재배치되는 단일 화면과 선택 상태 |
 | `DashboardSurfaceController` | DashboardSurfaceController.swift | NSViewController 래퍼 |
-| `StatusReadout` | AppDelegate.swift | 메뉴바 아이콘 + 텍스트 표시 |
+| `StatusReadout` | App/StatusReadout.swift | 고정 폭 메뉴바 CPU·메모리 표시와 아래부터 차오르는 흰색 스토리지 비트. 채움량을 유지한 채 상단 경계가 물결치며 글자는 투명. 동작 줄이기에서는 정지 |

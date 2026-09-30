@@ -18,6 +18,9 @@ final class DashboardModel: ObservableObject {
     @Published var sampled = false
     @Published var loginEnabled = false
     @Published var loginApproval = false
+    @Published private(set) var updateInterval: Double
+    var updateIntervalChanged: ((Double) -> Void)?
+    var updateIntervalLabel: String { String(format: "%.1f", updateInterval) }
     @Published var finish: RetroFinish {
         didSet { UserDefaults.standard.set(finish.rawValue, forKey: "retroFinish") }
     }
@@ -37,8 +40,11 @@ final class DashboardModel: ObservableObject {
     var toggleLogin: (() -> Void)?
     var quit: (() -> Void)?
     private let readProcesses: () -> [pid_t: ProcessSample]
-    init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples) {
+    private let defaults: UserDefaults
+    init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples, defaults: UserDefaults = .standard) {
         self.readProcesses = readProcesses
+        self.defaults = defaults
+        self.updateInterval = UpdateInterval.load(from: defaults)
         self.finish = RetroFinish(rawValue: UserDefaults.standard.string(forKey: "retroFinish") ?? "") ?? .ivory
         self.transitionStyle = TransitionStyle(rawValue: UserDefaults.standard.string(forKey: Self.transitionStyleKey) ?? "") ?? .wave
         self.transitionSpeed = TransitionSpeed(rawValue: UserDefaults.standard.string(forKey: Self.transitionSpeedKey) ?? "") ?? .normal
@@ -51,6 +57,15 @@ final class DashboardModel: ObservableObject {
     private var generation = 0
     private var active = false
     private var pendingGeneration: Int?
+    private var lastAuxiliaryRefresh = -Double.infinity
+
+    func setUpdateInterval(_ value: Double) {
+        let interval = UpdateInterval.normalized(value)
+        guard interval != updateInterval else { return }
+        updateInterval = interval
+        defaults.set(interval, forKey: UpdateInterval.key)
+        updateIntervalChanged?(interval)
+    }
     /// Resizing or reopening the same surface must not reset process sampling.
     func setPresented(_ visible: Bool) {
         guard active != visible else { return }
@@ -80,10 +95,15 @@ final class DashboardModel: ObservableObject {
         sampled = false
     }
     func refreshContext() {
-        battery = batteryText()
         pressure = memoryPressureText()
         swap = swapText()
         load = loadAverageText()
+        refreshAuxiliaryContext()
+    }
+
+    private func refreshAuxiliaryContext() {
+        lastAuxiliaryRefresh = ProcessInfo.processInfo.systemUptime
+        battery = batteryText()
         loginEnabled = SMAppService.mainApp.status == .enabled
         loginApproval = SMAppService.mainApp.status == .requiresApproval
     }
@@ -94,7 +114,14 @@ final class DashboardModel: ObservableObject {
         upload = rates.map { speed($0.1) } ?? "—"
         if let cpu { cpuHistory = Array((cpuHistory + [cpu.total]).suffix(40)) }
         if let memory { memoryHistory = Array((memoryHistory + [memory.percent]).suffix(40)) }
-        if active { refreshContext(); sampleProcesses() }
+        if active {
+            pressure = memoryPressureText()
+            swap = swapText()
+            load = loadAverageText()
+            // Login-service and battery queries need not run at the metric rate.
+            if ProcessInfo.processInfo.systemUptime - lastAuxiliaryRefresh >= 3 { refreshAuxiliaryContext() }
+            sampleProcesses()
+        }
     }
     func sampleProcesses() {
         guard active, pendingGeneration != generation else { return }

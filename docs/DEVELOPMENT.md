@@ -29,19 +29,21 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | --- | --- |
 | CPU·메모리·네트워크·디스크·배터리 계산 | `RetroStats/Metrics/Metrics.swift`: `cpuLoad`, `memoryUsage`, `parseNetwork`, `networkRate`, `DiskUsage` |
 | 프로세스 샘플링·순위 | `RetroStats/Metrics/Processes.swift`: `processSamples`, `rankedProcesses`, `ProcessOrder` |
-| 메뉴바·자동 실행·진단 인수 | `RetroStats/App/AppDelegate.swift`: `AppDelegate`, `StatusReadout`, `diagnostic`; `RetroStats/App/main.swift` |
+| 메뉴바·자동 실행·진단 인수 | `RetroStats/App/AppDelegate.swift`: `AppDelegate`, `diagnostic`; `RetroStats/App/StatusReadout.swift`: `StatusReadout`, `StorageBitFill`, `statusReadoutImage`; `RetroStats/App/main.swift` |
 | 반응형 단일 창·메뉴바 열기/닫기 | `RetroStats/Dashboard/DashboardView.swift`, `DashboardSurfaceController.swift`; `AppDelegate.openDashboard`, `toggleDashboardSize` |
 | 디스크 경고·알림·정리 진행 상태 | `RetroStats/Storage/StorageController.swift`: `StorageController`; `Storage/CacheReport.swift`: `CacheReport`, `CleanProgress` |
 | DerivedData 조회·삭제 보호 | `RetroStats/Storage/DerivedDataCleaner.swift`: `inspect`, `eligible`, `ensureIdle`, `clean` |
 | 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
 | 비트맵 글꼴·픽셀 컴포넌트·클래식 테마 | `RetroStats/PixelUI/`: `BitmapTextRenderer`, `RetroTheme.swift`, `PixelControls.swift`, `PixelIcons.swift`, `LCD.swift` |
 | 페이지 전환 | `RetroStats/Transition/`: `PageTransition`, `TransitionContainer` |
-| Swift 회귀 검사 (`--self-test`) | `Testing/SelfTest.swift`, `Storage/StorageSelfTest.swift`, `Storage/DerivedDataSelfTest.swift`, `Dashboard/DashboardSelfTest.swift`, `Transition/TransitionSelfTest.swift` |
+| Swift 회귀 검사 (`--self-test`) | `Testing/SelfTest.swift`, `Testing/StatusReadoutSelfTest.swift`, `Storage/StorageSelfTest.swift`, `Storage/DerivedDataSelfTest.swift`, `Dashboard/DashboardSelfTest.swift`, `Transition/TransitionSelfTest.swift` |
 | 타깃·프레임워크·패키징 | `RetroStats.xcodeproj/project.pbxproj`, `build.sh`, `RetroStats/Info.plist`, `RetroStats/Bridging.h`, `assets/AppIcon.png` |
 
 소스 파일은 `RetroStats/` 폴더에 있으며 `RetroStats.xcodeproj`의 `PBXFileSystemSynchronizedRootGroup`이 자동으로 추적한다. 새 Swift 파일을 `RetroStats/`에 추가하면 빌드에 자동으로 포함된다. 빌드는 `xcodebuild`로 `arm64-apple-macos26.0`을 타깃으로 하며 AppKit, SwiftUI(자동 링크), IOKit, ServiceManagement, UserNotifications를 링크한다. 번들 식별자는 `RetroStats/Info.plist`의 `local.jay.RetroStats`다. App Sandbox는 꺼져 있으며 DerivedData 삭제에 필요하다.
 
 ## GUI와 설치 검증
+
+`RETROSTATS_STATUS_READOUT_OUTPUT="$PWD/build/logs/status-readout-native" make verify`로 메뉴바 네이티브 렌더러의 투명 PNG, 확대 비교 이미지와 수면 애니메이션 GIF를 추가 출력할 수 있다. 0·25·62·100% 스토리지를 비교하며, 앱 GUI·로그인 등록·알림 서비스를 시작하지 않는다. 실제 메뉴바의 배경·클릭·다중 디스플레이 검증은 별도다.
 
 앱을 직접 실행하기 전 기존 RetroStats를 메뉴에서 종료한다. 같은 번들 식별자의 앱이 실행 중이면 새 앱은 종료하므로, 실행 명령 성공만으로 새 빌드를 확인했다고 판단하지 않는다.
 

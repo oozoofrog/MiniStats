@@ -191,7 +191,7 @@ struct DashboardContentView: View {
             Rectangle().fill(ink).frame(width: 6, height: 6).accessibilityHidden(true)
             Text("SYSTEM MONITOR")
             Spacer(minLength: 8)
-            Text("UPDATES EVERY 3 SEC")
+            Text("UPDATE \(model.updateIntervalLabel) SEC")
         }
         .font(.bitmap(10, scaled: false))
         .foregroundStyle(palette.muted)

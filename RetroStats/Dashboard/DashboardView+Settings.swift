@@ -4,6 +4,25 @@ import SwiftUI
 extension DashboardContentView {
     var settings: some View {
         VStack(alignment: .leading, spacing: 18) {
+            settingsGroup("MONITORING") {
+                HStack {
+                    Text("Update interval")
+                    Spacer()
+                    Text("\(model.updateIntervalLabel) s")
+                }.font(.bitmap(12))
+                Slider(value: Binding(get: { model.updateInterval }, set: { model.setUpdateInterval($0) }),
+                       in: UpdateInterval.range, step: 0.1)
+                    .accessibilityLabel("Update interval")
+                    .accessibilityValue("\(model.updateIntervalLabel) seconds")
+                HStack {
+                    Text("0.1 s")
+                    Spacer()
+                    Text("3.0 s")
+                }.font(.bitmap(11)).foregroundStyle(palette.muted)
+                Text("CPU, memory, network and process sampling.")
+                    .font(.bitmap(11)).foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             settingsGroup("APPEARANCE") {
                 Text("Finish").font(.bitmap(12))
                 PixelSegmentedControl(title: "Finish",

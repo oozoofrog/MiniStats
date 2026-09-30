@@ -15,10 +15,36 @@ func dashboardSelfTest() {
     precondition(ProcessOrder.cpu.sorted(rows).map(\.pid) == [1])
     precondition(ProcessOrder.cpu.sorted(rows).first?.cpu == 200)
     precondition(ProcessOrder.memory.sorted(rows).map(\.pid) == [2, 3, 1])
-    for seconds in [0, 0.5, -1, Double.infinity, Double.nan] {
+    for seconds in [0, -1, Double.infinity, Double.nan] {
         let initial = rankedProcesses(before: [1: old], after: [1: current], seconds: seconds)
         precondition(initial.count == 1 && initial[0].cpu == nil && initial[0].memory == 20)
     }
+    for seconds in [0.1, 0.5, 1, 3] {
+        let sampled = rankedProcesses(before: [1: old], after: [1: current], seconds: seconds)
+        precondition(abs((sampled[0].cpu ?? -1) - 400 / seconds) < 0.0001, "Subsecond CPU interval was lost")
+    }
+    let suite = "RetroStats.updateInterval.selftest.\(UUID().uuidString)"
+    let preferences = UserDefaults(suiteName: suite)!
+    defer { preferences.removePersistentDomain(forName: suite) }
+    let configured = DashboardModel(readProcesses: { [:] }, defaults: preferences)
+    precondition(configured.updateInterval == 3)
+    var changes: [Double] = []
+    configured.updateIntervalChanged = { changes.append($0) }
+    configured.setUpdateInterval(0.1)
+    configured.setUpdateInterval(0.1)
+    precondition(changes == [0.1], "Identical settings restarted the timer")
+    precondition(DashboardModel(defaults: preferences).updateInterval == 0.1, "Interval did not persist")
+    configured.setUpdateInterval(1.26)
+    precondition(configured.updateInterval == 1.3)
+    configured.setUpdateInterval(5)
+    precondition(configured.updateInterval == 3)
+    configured.setUpdateInterval(-1)
+    precondition(configured.updateInterval == 0.1)
+    configured.setUpdateInterval(.nan)
+    precondition(configured.updateInterval == 3 && changes.last == 3)
+    preferences.set("invalid", forKey: UpdateInterval.key)
+    precondition(DashboardModel(defaults: preferences).updateInterval == 3)
+    print("PASS: 0.1–3.0s interval persistence, step/range validation, change delivery and subsecond process CPU")
     let ties = rankedProcesses(before: [:], after: [8: current, 4: current], seconds: 0)
     precondition(ProcessOrder.memory.sorted(ties).map(\.pid) == [4, 8])
     precondition(rows.first(where: { $0.pid == 2 })?.id == "2:2")

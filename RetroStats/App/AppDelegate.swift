@@ -3,35 +3,11 @@ import Darwin
 import ServiceManagement
 import SwiftUI
 
-/// Two-line CPU/MEM readout. "100%" does not fit the 26pt column, so a full
-/// value shows the PixelMax icon instead of a number.
-private struct BitmapStatusText: View {
-    let cpu: Double?
-    let memory: Double?
-
-    var body: some View {
-        VStack(spacing: 1) {
-            row(cpu)
-            row(memory)
-        }
-        .font(.bitmap(9, scaled: false))
-        .frame(width: 26)
-        .textRenderer(BitmapTextRenderer())
-        .tracking(1)
-    }
-
-    @ViewBuilder private func row(_ value: Double?) -> some View {
-        if let value, value.rounded() >= 100 { PixelMax(size: 9) }
-        else { Text(value.map { String(format: "%.0f%%", $0) } ?? "—") }
-    }
-}
-
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private let dashboard = DashboardModel()
     private var dashboardWindow: NSWindow?
     private let status = NSStatusBar.system.statusItem(withLength: 38)
-    private let readout = NSHostingView(rootView: BitmapStatusText(cpu: nil, memory: nil))
-    private let warningIcon = NSImageView()
+    private let readout = StatusReadout()
     private var timer: Timer?
     private var storage: StorageController?
     private var previousCPU = cpuTicks()
@@ -41,24 +17,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         status.autosaveName = "RetroStats"
         readout.setAccessibilityElement(false)
-        warningIcon.setAccessibilityElement(false)
         if let button = status.button {
-            let content = StatusReadout(views: [warningIcon, readout])
-            content.orientation = .horizontal
-            content.alignment = .centerY
-            content.spacing = 6
-            content.translatesAutoresizingMaskIntoConstraints = false
-            button.addSubview(content)
+            readout.translatesAutoresizingMaskIntoConstraints = false
+            button.addSubview(readout)
             NSLayoutConstraint.activate([
-                content.centerXAnchor.constraint(equalTo: button.centerXAnchor),
-                content.centerYAnchor.constraint(equalTo: button.centerYAnchor),
-                readout.widthAnchor.constraint(equalToConstant: 26),
-                warningIcon.widthAnchor.constraint(equalToConstant: 16),
-                warningIcon.heightAnchor.constraint(equalToConstant: 16)
+                readout.leadingAnchor.constraint(equalTo: button.leadingAnchor),
+                readout.trailingAnchor.constraint(equalTo: button.trailingAnchor),
+                readout.topAnchor.constraint(equalTo: button.topAnchor),
+                readout.bottomAnchor.constraint(equalTo: button.bottomAnchor)
             ])
         }
         status.button?.setAccessibilityLabel("RetroStats system monitor")
-        storage = StorageController(changed: { [weak self] in self?.updateStorageWarning() }, openMenu: { [weak self] in self?.showStorageMenu() })
+        storage = StorageController(changed: { [weak self] in self?.updateStatusReadout() }, openMenu: { [weak self] in self?.showStorageMenu() })
         dashboard.storage = storage
         dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }
         dashboard.quit = { [weak self] in self?.quitApp() }
@@ -66,7 +36,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         status.button?.action = #selector(toggleDashboard)
         installMainMenu()
 
-        updateStorageWarning()
+        updateStatusReadout()
         if !UserDefaults.standard.bool(forKey: "loginConfigured") {
             do {
                 try SMAppService.mainApp.register()
@@ -74,14 +44,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             } catch { showError(error) }
         }
         refresh()
-        let timer = Timer(timeInterval: 3, repeats: true) { [weak self] _ in self?.refresh() }
-        timer.tolerance = 0.5
-        RunLoop.main.add(timer, forMode: .common)
-        self.timer = timer
+        dashboard.updateIntervalChanged = { [weak self] interval in self?.scheduleRefresh(every: interval) }
+        scheduleRefresh(every: dashboard.updateInterval)
         if CommandLine.arguments.contains("--show-dashboard") || CommandLine.arguments.contains("--show-storage") {
             DispatchQueue.main.async { self.openDashboard(page: CommandLine.arguments.contains("--show-storage") ? .storage : .overview) }
         }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
+    }
+
+    private func scheduleRefresh(every interval: Double) {
+        timer?.invalidate()
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in self?.refresh() }
+        timer.tolerance = min(0.1, interval * 0.1)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     private func refresh() {
@@ -89,27 +65,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let cpu = previousCPU.flatMap { old in currentCPU.flatMap { cpuLoad(old, $0) } }
         previousCPU = currentCPU
         let memory = memoryUsage()
-        readout.rootView = BitmapStatusText(cpu: cpu?.total, memory: memory?.percent)
         let now = ProcessInfo.processInfo.systemUptime
         let currentNetwork = networkCounters()
         let rates = previousNetwork.flatMap { old in currentNetwork.flatMap { networkRate(old, $0, seconds: now - previousTime) } }
         previousNetwork = currentNetwork
         previousTime = now
         dashboard.update(cpu: cpu, memory: memory, rates: rates)
-        updateStorageWarning()
+        updateStatusReadout()
     }
 
-    private func updateStorageWarning() {
+    private func updateStatusReadout() {
         dashboard.objectWillChange.send()
-        guard let storage else { return }
-        let warning = storage.disk?.warning == true
-        status.length = warning ? 60 : 38
-        warningIcon.isHidden = !warning
-        warningIcon.image = warning ? NSImage(systemSymbolName: "exclamationmark.triangle.fill", accessibilityDescription: "Storage usage at or above 50%") : nil
-        warningIcon.image?.isTemplate = true
+        readout.update(cpu: dashboard.cpu?.total, memory: dashboard.memory?.percent, storagePercent: storage?.disk?.percent)
         let cpuLabel = dashboard.cpu.map { String(format: "CPU %.0f%%", $0.total) } ?? "CPU measuring…"
         let memoryLabel = dashboard.memory.map { "Memory \(bytes($0.used)) / \(bytes(totalMemory))" } ?? "Memory read failed"
-        let diskLabel = storage.disk?.description ?? "Storage read failed"
+        let diskLabel = storage?.disk?.description ?? "Storage read failed"
         status.button?.toolTip = [cpuLabel, memoryLabel, "↓ \(dashboard.download)  ↑ \(dashboard.upload)", diskLabel].joined(separator: "\n")
         status.button?.setAccessibilityValue([cpuLabel, memoryLabel, diskLabel].joined(separator: ", "))
     }
@@ -251,10 +221,6 @@ func diagnostic(_ message: String) {
     let data = Data((message + "\n").utf8)
     if !FileManager.default.fileExists(atPath: path) { FileManager.default.createFile(atPath: path, contents: nil) }
     if let handle = FileHandle(forWritingAtPath: path) { defer { try? handle.close() }; _ = try? handle.seekToEnd(); try? handle.write(contentsOf: data) }
-}
-
-final class StatusReadout: NSStackView {
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
 }
 
 #if DEBUG

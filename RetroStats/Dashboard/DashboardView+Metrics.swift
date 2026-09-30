@@ -123,7 +123,7 @@ extension DashboardContentView {
             transferPanel("DOWNLOAD", value: model.download, icon: "arrow.down")
             transferPanel("UPLOAD", value: model.upload, icon: "arrow.up")
             RetroRule()
-            Text("Rates are sampled every 3 seconds across active physical network interfaces.")
+            Text("Rates are sampled every \(model.updateIntervalLabel) seconds across active physical network interfaces.")
             Text("VPN and bridge traffic is excluded to avoid counting the same transfer twice.")
                 .foregroundStyle(palette.muted)
         }

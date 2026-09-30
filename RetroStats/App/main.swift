@@ -10,6 +10,7 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
     selfTest()
     MainActor.assumeIsolated { bitmapTextSelfTest() }
     do {
+        try MainActor.assumeIsolated { try statusReadoutSelfTest() }
         try storageSelfTest()
         // derivedDataSelfTest is async; drive it with a Task + semaphore. It uses
         // only TaskGroup/async (no main run loop), so blocking the main thread is safe.

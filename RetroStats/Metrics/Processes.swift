@@ -41,7 +41,7 @@ struct RankedProcess: Identifiable {
 func rankedProcesses(before: [pid_t: ProcessSample], after: [pid_t: ProcessSample], seconds: Double) -> [RankedProcess] {
     after.map { pid, sample in
         var cpu: Double?
-        if seconds.isFinite, seconds >= 1, let old = before[pid], old.start == sample.start, sample.cpuTime >= old.cpuTime {
+        if seconds.isFinite, seconds > 0, let old = before[pid], old.start == sample.start, sample.cpuTime >= old.cpuTime {
             cpu = 100 * Double(sample.cpuTime - old.cpuTime) / 1e9 / seconds
         }
         return RankedProcess(pid: pid, start: sample.start, name: sample.name, cpu: cpu, memory: sample.memory)
