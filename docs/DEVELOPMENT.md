@@ -64,7 +64,22 @@ GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으�
 - 메뉴바 클릭 → 단일 창 → 상단 탐색 또는 사이드바의 독립 CPU/메모리 페이지 → 네트워크 → 스토리지 선택/선택 해제 → 설정을 확인한다. 실제 사용자 캐시는 삭제하지 않는다.
 - 처음에는 400×660 크기로 열리며, 창 우측 상단의 확대/축소 버튼이나 창 가장자리로 크기를 바꾼다. 폭 680pt에서 상단 탐색과 사이드바가 전환된다. 같은 호스팅 뷰를 유지하므로 페이지·스토리지 선택·측정 상태가 초기화되지 않아야 한다. 메뉴바 재클릭 또는 ⌘W로 닫으면 프로세스 샘플링을 중단한다. 창을 다른 앱 뒤로 보내도 자동으로 닫히지 않는다.
 - `--show-dashboard`와 `--show-storage`는 대시보드 창의 시작 화면을 지정한다.
-- `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드에서 360pt·400pt·840pt 폭의 여섯 화면을 PNG 36개로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. 상세 화면은 전체 내용을 확인할 수 있도록 긴 캔버스로 출력한다. SwiftUI 콘텐츠 배치 검사이며, 실제 창 타이틀바와 마우스 조작 검증을 대신하지 않는다.
+- `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드에서 360pt·400pt·840pt 폭의 여섯 화면을 PNG 36개로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. 상세 화면은 전체 내용을 확인할 수 있도록 긴 캔버스로 출력한다. SwiftUI 콘텐츠 배치 검사이며, 실제 창 타이틀바와 마우스 조작 검증을 대신하지 않는다. 추가 `tailscale-fixtures/`에는 CLI/API/server가 비활성인 상태·큰 글씨·긴 기기 이름·영어 fixture PNG와 설치/접속 허브 HTML을 저장한다. 네이티브 폼은 화면에 띄우지 않은 NSHostingView로 캡처한다.
 - `--bench-cleanup [항목 수]`(기본 100000)는 파일 시스템을 스텁으로 대체한 채 `clean` 루프(항목별 재검사·삭제 호출·이벤트 전달)만 시간을 잰다. 정리 로직 변경 전후 비교용이며 디스크를 건드리지 않는다.
 - `--diagnostics-output <절대 로그 경로>`는 프로세스 조회 수와 실패 코드를 기록하는 선택적 진단 인수다. 평소 실행에는 필요 없다.
 - SourceKit-LSP가 직접 `swiftc`로 묶는 파일들의 빌드 설정을 읽지 못하면 다른 파일의 심볼을 찾지 못하는 진단이 나올 수 있다. 컴파일 판정은 `make verify` 결과를 따른다.
+
+
+## Tailscale 모듈
+
+- 구현 위치는 `RetroStats/Tailscale/`. 기본 MY MAC 패널은 `DashboardView+Metrics.swift`에서 연결하고 기존 도구는 고급 화면에 보존한다. `DashboardModel`은 Network 표시 상태를 전달하며, `AppDelegate`는 사용자가 활성화했던 접속만 재시작 시 복원한다. CPU/메모리 타이머는 변경하지 않는다.
+- 상태 실행기·API transport/credential store·안내 서버 factory를 테스트에서 대체한다. `--self-test`는 실제 Tailscale CLI, 클라우드 API, Keychain 자격 증명, VPN/공유/라우팅 설정을 사용하지 않는다. 자체 검사에 포함된 실제 HTTP 검사는 `127.0.0.1`에 임시 바인딩하고 닫는다.
+- 대시보드 자체 검사·렌더링은 `DashboardModel(tailscale:)`에 비활성 fixture를 주입한다. 저장된 My Mac 링크의 시작·주기적 복원은 Keychain 승인을 요청하지 않으며, 읽기 거부 시 링크를 보존하고 Continue setup으로 명시적 승인을 안내한다. 기존 macOS file-based Keychain 호환 처리는 자격 증명 작업을 직렬화한 뒤 이전 interaction policy를 복원한다.
+- 명시적인 UI 리뷰는 `build/RetroStats.app/Contents/MacOS/RetroStats --show-tailscale-fixture`로 한다. 이 모드는 production AppDelegate 없이 별도 개발 창을 띄우고 CLI/API/안내 서버를 시작하지 않는다. Manage/Mobile helper를 전환하고 창 폭·키보드·접근성을 확인할 수 있다. 실제 설치·네트워크 결과를 검증하는 모드가 아니다.
+- 네이티브 폼은 비트맵 글꼴을 직접 그려 AppKit 입력/스크롤 레이아웃을 유지한다. 기존 대시보드와 Tailscale 패널의 bitmap shader는 유지한다.
+- 정책 저장은 API 서버 검증 및 ETag 조건부 갱신을 요구한다. 기타 API 관리 기능도 선택한 tailnet과 대상만 변경하며, 기기/라우트·로컬 설정/공유는 변경 후 다시 읽는다. 인증/권한 오류가 나면 사용자에게 표시하고 로컬 기능과 구분한다.
+- [사용 안내](TAILSCALE_USER_GUIDE.md), [조사와 구현 보강](TAILSCALE_RESEARCH.md), [검증 기록 및 실기기 체크리스트](TAILSCALE_VALIDATION.md).
+
+- `MacAccessCoordinator`는 지속 허브의 주소/포트/계정 경계/Keychain token/자동 식별/서비스 준비를 관리한다. `MacAccessProbe`는 지정한 포트만 검사하며 SSH/VNC banner, SMB negotiate 응답, 웹 HTTP 응답을 서비스 인증 성공과 구분한다. `TailscaleInstaller`는 공식 HTTPS 호스트/패키지명/서명/Gatekeeper 검사를 거쳐 Installer만 연다.
+- Network 또는 15분 도우미 활성 시 3초 수집, 지속 접속만 활성 시 15초 수집, 모두 비활성 시 중단한다. 지속 허브는 Tailscale 주소/저장 포트에만 바인딩하고 15분 LAN 등록 안내와 독립적으로 종료·복원된다. 설치 안내와 허브는 영어이며 `MacAccessArt`의 디자인 도트 배열/기존 RetroBitmapA를 사용한다.
+- 전체 로그와 구현/fixture/오프스크린/브라우저/실기기 증거는 [TAILSCALE_VALIDATION.md](TAILSCALE_VALIDATION.md)에 구분한다. 개발 fixture는 실제 설정/설치/계정 변경을 대신하지 않는다.

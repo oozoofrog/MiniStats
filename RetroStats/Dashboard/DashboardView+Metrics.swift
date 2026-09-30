@@ -126,6 +126,8 @@ extension DashboardContentView {
             Text("Rates are sampled every \(model.updateIntervalLabel) seconds across active physical network interfaces.")
             Text("VPN and bridge traffic is excluded to avoid counting the same transfer twice.")
                 .foregroundStyle(palette.muted)
+            RetroRule()
+            TailscalePanel(controller: model.tailscale, renderOnly: renderOnly)
         }
         .font(.bitmap(12))
     }

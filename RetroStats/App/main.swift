@@ -22,6 +22,7 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
         }
         sem.wait()
         if let ddError { throw ddError }
+        try MainActor.assumeIsolated { try tailscaleSelfTest() }
         dashboardSelfTest()
         transitionSelfTest()
     } catch {
@@ -43,6 +44,8 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
         exit(1)
     }
     exit(0)
+} else if CommandLine.arguments.contains("--show-tailscale-fixture") {
+    MainActor.assumeIsolated { showTailscaleUIFixture() }
 } else if let index = CommandLine.arguments.firstIndex(of: "--render-dashboard"), CommandLine.arguments.count > index + 1 {
     try MainActor.assumeIsolated { try renderDashboard(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
 } else if CommandLine.arguments.contains("--notification-status") {

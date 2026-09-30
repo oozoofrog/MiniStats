@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         status.button?.setAccessibilityLabel("RetroStats system monitor")
         storage = StorageController(changed: { [weak self] in self?.updateStatusReadout() }, openMenu: { [weak self] in self?.showStorageMenu() })
         dashboard.storage = storage
+        dashboard.tailscale.restoreAccess()
         dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }
         dashboard.quit = { [weak self] in self?.quitApp() }
         status.button?.target = self

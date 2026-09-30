@@ -26,4 +26,4 @@ run:
 
 install:
 	@./build.sh
-	@./scripts/deploy-app.sh build/MiniStats.app "$(DIR)"
+	@./scripts/deploy-app.sh build/RetroStats.app "$(DIR)"

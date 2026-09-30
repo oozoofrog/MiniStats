@@ -3,7 +3,8 @@ import Foundation
 import ServiceManagement
 
 final class DashboardModel: ObservableObject {
-    @Published var page: DashboardPage = .overview
+    @Published var page: DashboardPage = .overview { didSet { MainActor.assumeIsolated { tailscale.setNetworkActive(active && page == .network) } } }
+    lazy var tailscale = MainActor.assumeIsolated { TailscaleController(defaults: defaults) }
     @Published var cpu: CPULoad?
     @Published var memory: MemoryUsage?
     @Published var download = "—"
@@ -41,13 +42,14 @@ final class DashboardModel: ObservableObject {
     var quit: (() -> Void)?
     private let readProcesses: () -> [pid_t: ProcessSample]
     private let defaults: UserDefaults
-    init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples, defaults: UserDefaults = .standard) {
+    init(readProcesses: @escaping () -> [pid_t: ProcessSample] = processSamples, defaults: UserDefaults = .standard, tailscale: TailscaleController? = nil) {
         self.readProcesses = readProcesses
         self.defaults = defaults
         self.updateInterval = UpdateInterval.load(from: defaults)
         self.finish = RetroFinish(rawValue: UserDefaults.standard.string(forKey: "retroFinish") ?? "") ?? .ivory
         self.transitionStyle = TransitionStyle(rawValue: UserDefaults.standard.string(forKey: Self.transitionStyleKey) ?? "") ?? .wave
         self.transitionSpeed = TransitionSpeed(rawValue: UserDefaults.standard.string(forKey: Self.transitionSpeedKey) ?? "") ?? .normal
+        if let tailscale { self.tailscale = tailscale }
     }
     private static let transitionStyleKey = "transitionStyle"
     private static let transitionSpeedKey = "transitionSpeed"
@@ -79,6 +81,7 @@ final class DashboardModel: ObservableObject {
     func begin() {
         generation += 1
         active = true
+        MainActor.assumeIsolated { tailscale.setNetworkActive(page == .network) }
         previous = [:]
         previousTime = nil
         processes = []
@@ -88,6 +91,7 @@ final class DashboardModel: ObservableObject {
     }
     func end() {
         active = false
+        MainActor.assumeIsolated { tailscale.setNetworkActive(false) }
         generation += 1
         previous = [:]
         previousTime = nil

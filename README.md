@@ -27,6 +27,7 @@ curl -fsSL https://raw.githubusercontent.com/oozoofrog/MiniStats/main/scripts/in
 - **프로세스:** CPU·메모리 상위 3개 미리보기와 상위 5개 상세 정보
 - **액정 잔상:** 계기판의 숫자와 그래프가 바뀔 때 이전 표시가 은은하게 사라짐. 동작 줄이기에서는 비활성화
 - **DerivedData 정리:** 오래된 캐시를 선택해 정리
+- **My Mac 접속:** iPhone·iPad의 첫 설치·로그인·VPN 허용을 짧은 영어 문구와 도트 그래픽으로 안내. 연결 확인과 기기 식별을 자동으로 처리하고, 저장한 접속 링크에서 준비된 파일·화면·웹·터미널 서비스를 재사용. 상세 Tailscale 관리는 고급 화면에 보존
 - **macOS 연동:** 로그인 시 자동 실행, 스토리지 알림, 활성 상태 보기·Finder 바로가기
 
 클래식 매킨토시에서 착안한 줄무늬 타이틀바와 불투명 패널, 픽셀 글꼴을 사용합니다. 설정에서 Ivory·Platinum·Phosphor 마감과 글자 크기를 선택할 수 있으며, 모든 마감은 macOS 밝은/어두운 모드를 따릅니다.
@@ -45,4 +46,4 @@ open build/RetroStats.app
 
 대시보드와 메뉴바 계기는 직접 그린 5×7 고정 폭 글꼴 `RetroBitmapA`를 사용한다. 영문·숫자·기본 기호와 시안의 ‘한’, ‘글’은 글꼴 안에 픽셀 패턴으로 정의했고, 그 밖의 문자와 임의의 프로세스·파일 이름은 macOS 글리프를 선명한 픽셀 격자로 표시한다. macOS 알림·메뉴·대화상자는 시스템 글꼴을 따른다.
 
-[개발 안내](docs/DEVELOPMENT.md) · [버그 제보·기능 제안](https://github.com/oozoofrog/MiniStats/issues)
+[최신 릴리스](https://github.com/oozoofrog/MiniStats/releases/latest) · [My Mac 사용 안내](docs/TAILSCALE_USER_GUIDE.md) · [개발 안내](docs/DEVELOPMENT.md) · [버그 제보·기능 제안](https://github.com/oozoofrog/MiniStats/issues)

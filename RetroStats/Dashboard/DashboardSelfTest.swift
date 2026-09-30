@@ -26,14 +26,15 @@ func dashboardSelfTest() {
     let suite = "RetroStats.updateInterval.selftest.\(UUID().uuidString)"
     let preferences = UserDefaults(suiteName: suite)!
     defer { preferences.removePersistentDomain(forName: suite) }
-    let configured = DashboardModel(readProcesses: { [:] }, defaults: preferences)
+    let network = MainActor.assumeIsolated { TailscaleController.preview() }
+    let configured = DashboardModel(readProcesses: { [:] }, defaults: preferences, tailscale: network)
     precondition(configured.updateInterval == 3)
     var changes: [Double] = []
     configured.updateIntervalChanged = { changes.append($0) }
     configured.setUpdateInterval(0.1)
     configured.setUpdateInterval(0.1)
     precondition(changes == [0.1], "Identical settings restarted the timer")
-    precondition(DashboardModel(defaults: preferences).updateInterval == 0.1, "Interval did not persist")
+    precondition(DashboardModel(defaults: preferences, tailscale: network).updateInterval == 0.1, "Interval did not persist")
     configured.setUpdateInterval(1.26)
     precondition(configured.updateInterval == 1.3)
     configured.setUpdateInterval(5)
@@ -43,14 +44,14 @@ func dashboardSelfTest() {
     configured.setUpdateInterval(.nan)
     precondition(configured.updateInterval == 3 && changes.last == 3)
     preferences.set("invalid", forKey: UpdateInterval.key)
-    precondition(DashboardModel(defaults: preferences).updateInterval == 3)
+    precondition(DashboardModel(defaults: preferences, tailscale: network).updateInterval == 3)
     print("PASS: 0.1–3.0s interval persistence, step/range validation, change delivery and subsecond process CPU")
     let ties = rankedProcesses(before: [:], after: [8: current, 4: current], seconds: 0)
     precondition(ProcessOrder.memory.sorted(ties).map(\.pid) == [4, 8])
     precondition(rows.first(where: { $0.pid == 2 })?.id == "2:2")
     let background = DispatchQueue(label: "RetroStats.selftest").sync { processSamples() }
     precondition((background[getpid()]?.memory ?? 0) > 0, "Background libproc sampling failed")
-    let model = DashboardModel(readProcesses: { [1: current] })
+    let model = DashboardModel(readProcesses: { [1: current] }, defaults: preferences, tailscale: network)
     model.begin()
     let deadline = Date(timeIntervalSinceNow: 5)
     while !model.sampled && Date() < deadline { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02)) }
@@ -65,6 +66,13 @@ func dashboardSelfTest() {
     let presentationDeadline = Date(timeIntervalSinceNow: 5)
     while !model.sampled && Date() < presentationDeadline { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02)) }
     precondition(model.sampled && model.processes.first?.memory == 20)
+    model.page = .network
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+    MainActor.assumeIsolated {
+        precondition(model.tailscale === network && network.isFixture && network.access.enabled)
+        precondition(network.refreshedAt == nil && !network.mobile.active, "Dashboard fixture started real network work")
+    }
+    print("PASS: enabled My Mac dashboard lifecycle uses the injected inert network fixture")
     model.page = .storage
     model.setPresented(true)
     precondition(model.sampled && model.processes.first?.memory == 20, "Re-presenting the same surface reset sampling")
