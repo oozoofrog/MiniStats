@@ -186,4 +186,4 @@ DerivedData 정리 화면. 상태에 따라 표시가 분기된다.
 | `PixelToggleStyle` | PixelControls.swift | `.pixelToggle` 토글 스타일 |
 | `DashboardContentView` | DashboardView.swift | 폭에 맞춰 재배치되는 단일 화면과 선택 상태 |
 | `DashboardSurfaceController` | DashboardSurfaceController.swift | NSViewController 래퍼 |
-| `StatusReadout` | App/StatusReadout.swift | 고정 폭 메뉴바 CPU·메모리 표시와 아래부터 차오르는 흰색 스토리지 비트. 채움량을 유지한 채 상단 경계가 물결치며 글자는 투명. 동작 줄이기에서는 정지 |
+| `StatusReadout` | App/StatusReadout.swift | 고정 폭 메뉴바 CPU·메모리 표시와 아래부터 차오르는 흰색 스토리지 비트. 채움량을 유지한 채 1pt 경계가 높이 0.55pt·주기 5.5초·30fps의 잔물결로 움직이며 글자는 투명. 동작 줄이기에서는 정지 |

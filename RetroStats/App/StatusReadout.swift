@@ -36,34 +36,59 @@ struct BitmapStatusText: View {
     }
 }
 
-/// Solid 2pt cells rise from the bottom. Ranking cells by a traveling sine
-/// surface moves only the frontier while preserving the exact cell count.
+/// The approved ripple uses 1pt frontier cells whose opacity changes gradually.
+/// Solid columns below the frontier are batched; integrated coverage stays exact.
 struct StorageBitFill {
+    static let period: Double = 5.5
+    static let framesPerSecond: Double = 30
+    static let amplitude: CGFloat = 0.55
+
+    struct Cell: Equatable {
+        let rect: CGRect
+        let opacity: CGFloat
+    }
+
     static func percent(_ value: Double?) -> Double {
         guard let value, value.isFinite else { return 0 }
         return min(100, max(0, value))
     }
 
-    static func cells(size: CGSize, percent value: Double?, phase: Double? = nil) -> [CGRect] {
-        guard size.width > 0, size.height > 0 else { return [] }
-        let columns = Int(ceil(size.width / 2))
-        let rows = Int(ceil(size.height / 2))
-        let count = Int((Double(columns * rows) * percent(value) / 100).rounded())
-        func rank(_ x: Int) -> Int { (x % 2) * 4 + (x / 2 % 2) * 2 + (x / 4 % 2) }
+    static func cells(size: CGSize, percent value: Double?, phase: Double? = nil) -> [Cell] {
+        guard size.width.isFinite, size.height.isFinite, size.width > 0, size.height > 0 else { return [] }
+        let amount = CGFloat(percent(value) / 100)
+        guard amount > 0 else { return [] }
+        let columns = Int(ceil(size.width))
+        let widths = (0..<columns).map { min(1, size.width - CGFloat($0)) }
         let phase = phase.flatMap { $0.isFinite ? $0.truncatingRemainder(dividingBy: 2 * .pi) : nil }
-        let offsets = (0..<columns).map { x in phase.map { 0.85 * sin(2 * .pi * Double(x) / Double(columns) + $0) } ?? 0 }
-        let order = (0..<(columns * rows)).map { index in
-            (index: index, level: Int(((Double(index / columns) - offsets[index % columns]) * 1_000_000).rounded()))
-        }.sorted { a, b in
-            if a.level != b.level { return a.level < b.level }
-            let x = a.index % columns, y = b.index % columns
-            return rank(x) == rank(y) ? x < y : rank(x) < rank(y)
+        let heightScale = amplitude * min(1, amount * 12, (1 - amount) * 12)
+        let offsets = (0..<columns).map { x -> CGFloat in
+            guard let phase else { return 0 }
+            let angle = 2 * Double.pi * (Double(x) + 0.5) / Double(columns)
+            return heightScale * CGFloat(0.7 * sin(angle - phase) + 0.3 * sin(2 * angle + phase))
         }
-        return order.prefix(count).map { cell in
-            let index = cell.index
-            let x = CGFloat(index % columns) * 2
-            let y = CGFloat(index / columns) * 2
-            return CGRect(x: x, y: y, width: min(2, size.width - x), height: min(2, size.height - y))
+        let target = amount * size.width * size.height
+        var low = -heightScale, high = size.height + heightScale
+        for _ in 0..<32 {
+            let mid = (low + high) / 2
+            let area = offsets.enumerated().reduce(CGFloat.zero) {
+                $0 + widths[$1.offset] * min(size.height, max(0, mid + $1.element))
+            }
+            if area < target { low = mid } else { high = mid }
+        }
+        let base = (low + high) / 2
+        return offsets.enumerated().flatMap { x, offset -> [Cell] in
+            let height = min(size.height, max(0, base + offset))
+            let solid = floor(height)
+            var cells: [Cell] = []
+            if solid > 0 {
+                cells.append(Cell(rect: CGRect(x: CGFloat(x), y: 0, width: widths[x], height: solid), opacity: 1))
+            }
+            let edgeHeight = min(1, size.height - solid)
+            if height > solid, edgeHeight > 0 {
+                cells.append(Cell(rect: CGRect(x: CGFloat(x), y: solid, width: widths[x], height: edgeHeight),
+                                  opacity: (height - solid) / edgeHeight))
+            }
+            return cells
         }
     }
 }
@@ -93,7 +118,11 @@ struct StorageBitFill {
     context.scaleBy(x: scale, y: scale)
     context.setShouldAntialias(false)
     context.setFillColor(NSColor.white.cgColor)
-    for cell in StorageBitFill.cells(size: size, percent: storagePercent, phase: phase) { context.fill(cell) }
+    for cell in StorageBitFill.cells(size: size, percent: storagePercent, phase: phase) {
+        context.setAlpha(cell.opacity)
+        context.fill(cell.rect)
+    }
+    context.setAlpha(1)
     context.setBlendMode(.xor)
     context.interpolationQuality = .none
     context.draw(text, in: CGRect(origin: .zero, size: size))
@@ -147,12 +176,12 @@ final class StatusReadout: NSView {
         let enabled = Self.shouldAnimate(storagePercent: storagePercent, attached: window != nil,
                                          reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
         if enabled && animationTimer == nil {
-            let timer = Timer(timeInterval: 1.0 / 12, repeats: true) { [weak self] _ in
+            let timer = Timer(timeInterval: 1.0 / StorageBitFill.framesPerSecond, repeats: true) { [weak self] _ in
                 guard let self else { return }
                 self.image = nil
                 self.needsDisplay = true
             }
-            timer.tolerance = 0.01
+            timer.tolerance = 0.005
             RunLoop.main.add(timer, forMode: .common)
             animationTimer = timer
         } else if !enabled {
@@ -196,7 +225,9 @@ final class StatusReadout: NSView {
         }
         if textImage == nil { textImage = statusTextImage(size: bounds.size, scale: scale, cpu: cpu, memory: memory) }
         if image == nil, let textImage {
-            let phase = animationTimer.map { _ in 2 * Double.pi * ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 4) / 4 }
+            let phase = animationTimer.map { _ in
+                2 * Double.pi * ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: StorageBitFill.period) / StorageBitFill.period
+            }
             image = compositeStatusReadout(size: bounds.size, scale: scale, text: textImage, storagePercent: storagePercent, phase: phase)
         }
         guard let image else { return }
