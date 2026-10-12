@@ -33,10 +33,11 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | 반응형 단일 창·메뉴바 열기/닫기 | `RetroStats/Dashboard/DashboardView.swift`, `DashboardSurfaceController.swift`; `AppDelegate.openDashboard`, `toggleDashboardSize` |
 | 디스크 경고·알림·정리 진행 상태 | `RetroStats/Storage/StorageController.swift`: `StorageController`; `Storage/CacheReport.swift`: `CacheReport`, `CleanProgress` |
 | DerivedData 조회·삭제 보호 | `RetroStats/Storage/DerivedDataCleaner.swift`: `inspect`, `eligible`, `ensureIdle`, `clean` |
+| 예약 정리·제외·기록 | `RetroStats/Storage/AutoCleanupController.swift`: `tick`, `preview`, `confirmDeletion`; `Storage/AutoCleanup.swift`: `AutoCleanupEngine`, `AutoCleanupSettings`; `Dashboard/DashboardView+AutoCleanup.swift` |
 | 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
 | 비트맵 글꼴·픽셀 컴포넌트·클래식 테마 | `RetroStats/PixelUI/`: `BitmapTextRenderer`, `RetroTheme.swift`, `PixelControls.swift`, `PixelIcons.swift`, `LCD.swift` |
 | 페이지 전환 | `RetroStats/Transition/`: `PageTransition`, `TransitionContainer` |
-| Swift 회귀 검사 (`--self-test`) | `Testing/SelfTest.swift`, `Testing/StatusReadoutSelfTest.swift`, `Storage/StorageSelfTest.swift`, `Storage/DerivedDataSelfTest.swift`, `Dashboard/DashboardSelfTest.swift`, `Transition/TransitionSelfTest.swift` |
+| Swift 회귀 검사 (`--self-test`) | `Testing/SelfTest.swift`, `Testing/StatusReadoutSelfTest.swift`, `Storage/StorageSelfTest.swift`, `Storage/DerivedDataSelfTest.swift`, `Storage/AutoCleanupSelfTest.swift`, `Dashboard/DashboardSelfTest.swift`, `Transition/TransitionSelfTest.swift` |
 | 타깃·프레임워크·패키징 | `RetroStats.xcodeproj/project.pbxproj`, `build.sh`, `RetroStats/Info.plist`, `RetroStats/Bridging.h`, `assets/AppIcon.png` |
 
 소스 파일은 `RetroStats/` 폴더에 있으며 `RetroStats.xcodeproj`의 `PBXFileSystemSynchronizedRootGroup`이 자동으로 추적한다. 새 Swift 파일을 `RetroStats/`에 추가하면 빌드에 자동으로 포함된다. 빌드는 `xcodebuild`로 `arm64-apple-macos26.0`을 타깃으로 하며 AppKit, SwiftUI(자동 링크), IOKit, ServiceManagement, UserNotifications를 링크한다. 번들 식별자는 `RetroStats/Info.plist`의 `local.jay.RetroStats`다. App Sandbox는 꺼져 있으며 DerivedData 삭제에 필요하다.
@@ -66,6 +67,7 @@ GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으�
 - `--show-dashboard`와 `--show-storage`는 대시보드 창의 시작 화면을 지정한다.
 - `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드에서 360pt·400pt·840pt 폭의 여섯 화면을 PNG 36개로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. 상세 화면은 전체 내용을 확인할 수 있도록 긴 캔버스로 출력한다. SwiftUI 콘텐츠 배치 검사이며, 실제 창 타이틀바와 마우스 조작 검증을 대신하지 않는다. 추가 `tailscale-fixtures/`에는 CLI/API/server가 비활성인 상태·큰 글씨·긴 기기 이름·영어 fixture PNG와 설치/접속 허브 HTML을 저장한다. 네이티브 폼은 화면에 띄우지 않은 NSHostingView로 캡처한다.
 - `--bench-cleanup [항목 수]`(기본 100000)는 파일 시스템을 스텁으로 대체한 채 `clean` 루프(항목별 재검사·삭제 호출·이벤트 전달)만 시간을 잰다. 정리 로직 변경 전후 비교용이며 디스크를 건드리지 않는다.
+- `--render-auto-cleanup <절대 출력 폴더>`는 자동 정리 설정 fixture를 312pt·636pt 콘텐츠 폭, 일반·큰 글씨, 밝은·어두운 모드로 PNG 8개에 렌더링한다. 임시 UserDefaults를 사용하며 서비스·프로세스 조회·캐시 검사·삭제를 실행하지 않는다. 콘텐츠 배치 검사이며 실제 창 조작 검증은 별도다.
 - `--diagnostics-output <절대 로그 경로>`는 프로세스 조회 수와 실패 코드를 기록하는 선택적 진단 인수다. 평소 실행에는 필요 없다.
 - SourceKit-LSP가 직접 `swiftc`로 묶는 파일들의 빌드 설정을 읽지 못하면 다른 파일의 심볼을 찾지 못하는 진단이 나올 수 있다. 컴파일 판정은 `make verify` 결과를 따른다.
 

@@ -200,7 +200,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func quitApp() { NSApp.terminate(nil) }
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
-        storage?.cleaning == true ? .terminateCancel : .terminateNow
+        storage?.cleaning == true || storage?.autoCleanup.running == true ? .terminateCancel : .terminateNow
     }
 
     func applicationWillTerminate(_ notification: Notification) { storage?.stop() }

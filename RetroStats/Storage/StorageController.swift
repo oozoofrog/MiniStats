@@ -6,7 +6,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     private(set) var disk: DiskUsage?
     private(set) var cleaning = false
     private(set) var report: CacheReport?
-    private(set) var busy = false
+    private var storageBusy = false
+    var busy: Bool { storageBusy || autoCleanup.busy }
+    let autoCleanup: AutoCleanupController
     private var task: Task<Void, Never>?
     #if DEBUG
     private var previewLocked = false
@@ -15,6 +17,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     private(set) var cleanProgress: CleanProgress?
     private(set) var scanPath: String?
     private var timer: Timer?
+    private var stopped = false
     private var lastScan = Date.distantPast
     private var sendingNotification = false
     private let defaults = UserDefaults.standard
@@ -26,10 +29,24 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     var includeShared: Bool { defaults.bool(forKey: "includeShared") }
     private var notificationID: String { preview ? "storage-warning-preview" : "storage-warning" }
 
-    init(changed: @escaping () -> Void, openMenu: @escaping () -> Void, startServices: Bool = true) {
+    init(changed: @escaping () -> Void, openMenu: @escaping () -> Void, startServices: Bool = true,
+         autoCleanup: AutoCleanupController? = nil) {
         self.changed = changed
         self.openMenu = openMenu
+        self.autoCleanup = autoCleanup ?? AutoCleanupController(
+            support: FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/RetroStats"),
+            allowOperations: startServices, changed: changed)
         super.init()
+        self.autoCleanup.canRun = { [weak self] in
+            guard let self else { return false }
+            return !self.storageBusy && self.cleanProgress?.phase != .confirming
+        }
+        self.autoCleanup.completed = { [weak self] in
+            guard let self, !self.stopped else { return }
+            self.report = nil
+            self.checkDisk()
+            self.refresh()
+        }
         if let data = try? Data(contentsOf: support.appendingPathComponent("report.json")) {
             report = try? CacheReport.decode(data)
         }
@@ -50,6 +67,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.checkDisk()
+            self.autoCleanup.tick()
             if Date().timeIntervalSince(self.lastScan) >= 3600 { self.refresh() }
         }
         timer.tolerance = 5
@@ -112,7 +130,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     }
 
     func refresh() {
-        guard !busy else { return }
+        guard !busy, !stopped else { return }
         lastScan = Date()
         run(clean: false)
     }
@@ -160,7 +178,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
         #if DEBUG
         guard !previewLocked else { return }
         #endif
-        busy = true
+        storageBusy = true
         cleaning = clean
         lastError = nil
         if clean, var progress = cleanProgress {
@@ -273,7 +291,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     }
 
     private func finish() {
-        busy = false
+        storageBusy = false
         cleaning = false
         scanPath = nil
         task = nil
@@ -281,8 +299,10 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     }
 
     func stop() {
+        stopped = true
         timer?.invalidate()
         task?.cancel()
+        autoCleanup.stop()
     }
 }
 
@@ -304,7 +324,7 @@ extension StorageController {
         controller.previewLocked = true
         controller.disk = disk
         controller.report = report
-        controller.busy = busy
+        controller.storageBusy = busy
         controller.cleaning = cleaning
         controller.lastError = lastError
         controller.cleanProgress = cleanProgress

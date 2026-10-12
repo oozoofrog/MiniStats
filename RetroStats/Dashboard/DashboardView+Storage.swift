@@ -21,6 +21,7 @@ extension DashboardContentView {
             } else {
                 attentionText("Storage capacity could not be read.")
             }
+            autoCleanupSection
             RetroRule()
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
@@ -34,7 +35,7 @@ extension DashboardContentView {
             if let progress = storage?.cleanProgress {
                 cleanProgressSection(progress)
             } else {
-                if storage?.busy == true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.bitmap(11)).foregroundStyle(palette.muted).lineLimit(1).truncationMode(.middle) }
+                if storage?.busy == true && storage?.autoCleanup.busy != true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.bitmap(11)).foregroundStyle(palette.muted).lineLimit(1).truncationMode(.middle) }
                 if let error = storage?.lastError { attentionText(error) }
                 if let report = storage?.report {
                     HStack {

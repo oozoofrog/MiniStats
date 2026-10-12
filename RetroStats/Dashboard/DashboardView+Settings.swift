@@ -54,7 +54,7 @@ extension DashboardContentView {
                     VStack(alignment: .leading, spacing: 10) { utilityButtons }
                 }
             }
-            Text("Disk is checked every minute; cache size every hour. Cleanup only runs when you start it.")
+            Text("Disk is checked every minute; DerivedData size every hour. Configure scheduled cleanup on the Storage page.")
                 .font(.bitmap(11)).foregroundStyle(palette.muted)
             Text("Follows macOS Light/Dark Mode. Pixel text and opaque panels stay enabled for every finish.")
                 .font(.bitmap(11)).foregroundStyle(palette.muted)
@@ -62,7 +62,7 @@ extension DashboardContentView {
             actions {
                 Button("Open Activity Monitor") { openActivityMonitor() }.buttonStyle(.pixelGhost)
                 if !compact { Spacer(minLength: 8) }
-                Button("Quit RetroStats") { model.quit?() }.buttonStyle(.pixel).disabled(storage?.cleaning == true)
+                Button("Quit RetroStats") { model.quit?() }.buttonStyle(.pixel).disabled(storage?.cleaning == true || storage?.autoCleanup.running == true)
             }.font(.bitmap(11))
         }
     }

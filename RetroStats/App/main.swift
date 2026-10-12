@@ -12,12 +12,17 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
     do {
         try MainActor.assumeIsolated { try statusReadoutSelfTest() }
         try storageSelfTest()
+        try MainActor.assumeIsolated { try autoCleanupSettingsSelfTest() }
+        try MainActor.assumeIsolated { try autoCleanupControllerSelfTest() }
         // derivedDataSelfTest is async; drive it with a Task + semaphore. It uses
         // only TaskGroup/async (no main run loop), so blocking the main thread is safe.
         let sem = DispatchSemaphore(value: 0)
         var ddError: Error?
         Task {
-            do { try await derivedDataSelfTest() } catch let e { ddError = e }
+            do {
+                try await derivedDataSelfTest()
+                try await autoCleanupSelfTest()
+            } catch let e { ddError = e }
             sem.signal()
         }
         sem.wait()
@@ -44,6 +49,8 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
         exit(1)
     }
     exit(0)
+} else if let index = CommandLine.arguments.firstIndex(of: "--render-auto-cleanup"), CommandLine.arguments.count > index + 1 {
+    try MainActor.assumeIsolated { try renderAutoCleanup(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
 } else if CommandLine.arguments.contains("--show-tailscale-fixture") {
     MainActor.assumeIsolated { showTailscaleUIFixture() }
 } else if let index = CommandLine.arguments.firstIndex(of: "--render-dashboard"), CommandLine.arguments.count > index + 1 {
