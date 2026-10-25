@@ -377,8 +377,12 @@ private final class FixtureGuide: MobileGuideServing {
     let cancel = Task { try await runner.run(executable: "/bin/sleep", arguments: ["2"], timeout: 3) }
     try await Task.sleep(for: .milliseconds(20)); cancel.cancel()
     try await tsThrows(.cancelled) { _ = try await cancel.value }
+    let preCancelled = Task { try await runner.run(executable: "/bin/sleep", arguments: ["2"], timeout: 3) }
+    preCancelled.cancel()
+    try await tsThrows(.cancelled) { _ = try await preCancelled.value }
     let burst = try await TailscaleCLI(limit: 200000).run(executable: "/bin/sh", arguments: ["-c", "(/usr/bin/head -c 70000 /dev/zero >&2) & /usr/bin/head -c 70000 /dev/zero; wait"], timeout: 4)
     try tsRequire(burst.stdout.count == 70000 && burst.stderr.count == 70000, "Both pipes larger than pipe capacity drain without deadlock or truncation")
+    try await tailscaleCLICancellationSelfTest()
     print("PASS: CLI concurrent large pipes, output ceiling, timeout and cancellation without Tailscale execution")
 
     let response = TailscaleAPIResponse(data: Data("{}".utf8), status: 200, etag: "fixture-etag")

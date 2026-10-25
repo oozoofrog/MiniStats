@@ -34,20 +34,7 @@ extension DashboardContentView {
             }
 
             RetroRule()
-            Button { model.page = .storage } label: {
-                HStack(spacing: 12) {
-                    Image(systemName: "internaldrive").accessibilityHidden(true)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(storage?.disk?.name ?? "Storage")
-                        Text(storage?.disk.map { "\(bytes($0.free)) free of \(bytes($0.total))" } ?? "Read failed")
-                            .font(.bitmap(11)).foregroundStyle(palette.muted)
-                    }
-                    Spacer(minLength: 4)
-                    if !compact { Text("Storage ↗").font(.bitmap(11)) }
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            overviewVolumes
             HStack {
                 Text(model.battery).font(.bitmap(11)).foregroundStyle(palette.muted)
                 Spacer(minLength: 8)

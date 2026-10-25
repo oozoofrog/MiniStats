@@ -4,7 +4,9 @@ import SwiftUI
 struct MenuSummaryView: View {
     @ObservedObject var model: DashboardModel
     var openDetail: (DashboardPage) -> Void
+    var renderOnly = false
     @State var selectedPage: DashboardPage? = nil
+    @State var showsVolumes = false
     @Environment(\.dismiss) private var dismiss
     @Environment(\.colorScheme) private var scheme
     @Environment(\.scenePhase) private var scenePhase
@@ -28,6 +30,16 @@ struct MenuSummaryView: View {
                        detail: model.storage?.disk.map { String(format: "%.0f%% used", $0.percent) } ?? "Unavailable", page: .storage)
             }
             .padding(.horizontal, 14)
+            DisclosureGroup("All Volumes (\(model.storage?.volumes.count ?? 0))", isExpanded: $showsVolumes) {
+                if renderOnly {
+                    // Match the live viewport while ImageRenderer draws its contents.
+                    volumeList.fixedSize(horizontal: false, vertical: true)
+                        .frame(height: volumeListHeight, alignment: .top).clipped()
+                } else {
+                    ScrollView { volumeList }.frame(height: volumeListHeight)
+                }
+            }
+            .font(.bitmap(11)).padding(.horizontal, 14).padding(.top, 8)
             Button { show(selectedPage ?? model.page) } label: {
                 HStack {
                     Text("Open Dashboard")
@@ -58,10 +70,29 @@ struct MenuSummaryView: View {
         .environment(\.retroPalette, palette)
         .frame(width: 340)
         .fixedSize(horizontal: false, vertical: true)
-        .onAppear { diagnostic("Summary appeared"); model.setSummaryPresented(true) }
+        .onAppear { diagnostic("Summary appeared"); model.setSummaryPresented(true); if !renderOnly { model.storage?.refreshVolumes() } }
         .onChange(of: scenePhase) { _, phase in model.setSummaryPresented(phase != .background) }
         .onDisappear { model.setSummaryPresented(false) }
         .onExitCommand { dismiss() }
+    }
+
+    private var volumeListHeight: CGFloat { min(240, CGFloat(max(1, model.storage?.volumes.count ?? 0)) * 85) }
+
+    private var volumeList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if model.storage?.volumes.isEmpty != false {
+                Text(model.storage?.refreshingVolumes == true ? "Reading volumes…" : "Capacity unavailable")
+                    .font(.bitmap(11)).foregroundStyle(palette.muted)
+            }
+            ForEach(model.storage?.volumes ?? []) { volume in
+                Button {
+                    model.selectedStorageVolumeID = volume.id
+                    show(.storage)
+                } label: {
+                    StorageVolumeRow(volume: volume).contentShape(Rectangle())
+                }.buttonStyle(.plain).accessibilityHint("Open this volume in Storage")
+            }
+        }.padding(.vertical, 8)
     }
 
     private func metric(_ title: String, icon: String, value: String, detail: String, page: DashboardPage) -> some View {

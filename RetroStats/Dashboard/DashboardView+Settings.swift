@@ -4,6 +4,16 @@ import SwiftUI
 extension DashboardContentView {
     var settings: some View {
         VStack(alignment: .leading, spacing: 18) {
+            settingsGroup("APPEARANCE") {
+                Text("Finish").font(.bitmap(12))
+                PixelSegmentedControl(title: "Finish",
+                                      options: RetroFinish.allCases.map { ($0, $0.label) },
+                                      selection: $model.finish)
+                Text("Text Size").font(.bitmap(12)).padding(.top, 4)
+                PixelSegmentedControl(title: "Text Size",
+                                      options: FontScale.allCases.map { ($0, $0.label) },
+                                      selection: $model.fontScale)
+            }
             settingsGroup("MONITORING") {
                 HStack {
                     Text("Update interval")
@@ -23,15 +33,10 @@ extension DashboardContentView {
                     .font(.bitmap(11)).foregroundStyle(palette.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
-            settingsGroup("APPEARANCE") {
-                Text("Finish").font(.bitmap(12))
-                PixelSegmentedControl(title: "Finish",
-                                      options: RetroFinish.allCases.map { ($0, $0.label) },
-                                      selection: $model.finish)
-                Text("Text Size").font(.bitmap(12)).padding(.top, 4)
-                PixelSegmentedControl(title: "Text Size",
-                                      options: FontScale.allCases.map { ($0, $0.label) },
-                                      selection: $model.fontScale)
+            settingsGroup("MENU BAR") {
+                Text("Main disk only").font(.bitmap(12))
+                Text("The status icon keeps CPU and memory on two lines. Its background shows the main disk’s used space. All volumes are available in the menu and Storage.")
+                    .font(.bitmap(11)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
             }
             settingsGroup("TRANSITIONS") {
                 Text("Page Transition").font(.bitmap(12))
@@ -84,7 +89,7 @@ extension DashboardContentView {
                     VStack(alignment: .leading, spacing: 10) { utilityButtons }
                 }
             }
-            Text("Disk is checked every minute; DerivedData size every hour. Configure scheduled cleanup on the Storage page.")
+            Text("Mounted-volume capacities refresh every minute. Configure scheduled cleanup on the Storage page.")
                 .font(.bitmap(11)).foregroundStyle(palette.muted)
             Text("Follows macOS Light/Dark Mode. Pixel text and opaque panels stay enabled for every finish.")
                 .font(.bitmap(11)).foregroundStyle(palette.muted)

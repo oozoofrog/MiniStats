@@ -38,6 +38,7 @@ final class DashboardModel: ObservableObject {
             UserDefaults.standard.set(fontScale.rawValue, forKey: FontScale.key)
         }
     }
+    @Published var selectedStorageVolumeID: String?
     var storage: StorageController?
     var toggleLogin: (() -> Void)?
     var quit: (() -> Void)?

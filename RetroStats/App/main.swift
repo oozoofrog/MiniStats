@@ -13,6 +13,9 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
     do {
         try MainActor.assumeIsolated { try statusReadoutSelfTest() }
         try storageSelfTest()
+        try storageVolumeSelfTest()
+        try storageExplorerSelfTest()
+        try MainActor.assumeIsolated { try storageExplorerModelSelfTest() }
         try MainActor.assumeIsolated { try autoCleanupSettingsSelfTest() }
         try MainActor.assumeIsolated { try autoCleanupControllerSelfTest() }
         if let destination = ProcessInfo.processInfo.environment["RETROSTATS_ARCHIVE_TEST_DESTINATION"] {
