@@ -27,7 +27,7 @@ struct TailscaleInstallation: Equatable {
     var executable: String
     var appPath: String?
     var variant: TailscaleVariant
-    static func detect(fileManager: FileManager = .default, appPaths: [String]? = nil, cliPaths: [String] = ["/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale", "/opt/local/bin/tailscale"]) -> TailscaleInstallation? {
+    static func detect(fileManager: FileManager = .default, appPaths: [String]? = nil, cliPaths: [String] = ["/opt/homebrew/bin/tailscale", "/usr/local/bin/tailscale", "/opt/local/bin/tailscale"], standaloneAppPath: String = "/Applications/Tailscale.app") -> TailscaleInstallation? {
         let apps = appPaths ?? ["/Applications/Tailscale.app", fileManager.homeDirectoryForCurrentUser.appendingPathComponent("Applications/Tailscale.app").path]
         for app in apps {
             let binary = app + "/Contents/MacOS/Tailscale"
@@ -37,6 +37,15 @@ struct TailscaleInstallation: Equatable {
         }
         for binary in cliPaths where fileManager.isExecutableFile(atPath: binary) {
             let resolved = URL(fileURLWithPath: binary).resolvingSymlinksInPath().path
+            if let attributes = try? fileManager.attributesOfItem(atPath: resolved), attributes[.type] as? FileAttributeType == .typeRegular,
+               let size = attributes[.size] as? NSNumber, size.intValue <= 512,
+               isOfficialWrapper(at: resolved) {
+                // The vendor launcher is a regular shell script, not a CLI-only distribution.
+                // Read its known static form; never execute a launcher to discover its target.
+                let executable = standaloneAppPath + "/Contents/MacOS/Tailscale"
+                guard fileManager.isExecutableFile(atPath: executable) else { continue }
+                return Self(executable: executable, appPath: standaloneAppPath, variant: fileManager.fileExists(atPath: standaloneAppPath + "/Contents/_MASReceipt/receipt") ? .appStore : .standalone)
+            }
             if let contents = resolved.range(of: "/Contents/MacOS/"), resolved[..<contents.lowerBound].hasSuffix(".app") {
                 let app = String(resolved[..<contents.lowerBound])
                 return Self(executable: binary, appPath: app, variant: fileManager.fileExists(atPath: app + "/Contents/_MASReceipt/receipt") ? .appStore : .standalone)
@@ -44,6 +53,13 @@ struct TailscaleInstallation: Equatable {
             return Self(executable: binary, appPath: nil, variant: .cli)
         }
         return nil
+    }
+    static func isOfficialWrapper(_ data: Data) -> Bool { data == Data("#!/bin/sh\n/Applications/Tailscale.app/Contents/MacOS/Tailscale \"$@\"\n".utf8) }
+    private static func isOfficialWrapper(at path: String) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: URL(fileURLWithPath: path)) else { return false }
+        defer { try? handle.close() }
+        guard let data = try? handle.read(upToCount: 513), data.count <= 512 else { return false }
+        return isOfficialWrapper(data)
     }
 }
 

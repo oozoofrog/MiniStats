@@ -4,12 +4,16 @@ Start at **Network → MY MAC → Start access**. The helper uses short English 
 
 ## First time
 
-1. If needed, choose **Install connection app** on the Mac. RetroStats obtains the official Tailscale package, checks its trusted Tailscale installer signature and Gatekeeper assessment, then opens Installer. Complete Installer and the macOS approval/sign-in prompts. An existing Mac distribution is preserved.
+1. If needed, choose **Install connection app** on the Mac. RetroStats downloads and verifies the official Tailscale package, then asks for normal macOS administrator authorization and runs the installation. It continues only after checking the installed app, signature and receipt. Allow the network extension/VPN and sign in when prompted; each step remains pending until actual state changes. An existing Mac distribution is preserved.
 2. Scan **Mobile Guide** with your iPhone or iPad. Install Tailscale, sign in with the displayed **Sign-in account**, and allow its VPN configuration. This is your Tailscale identity, not your Mac local login.
 3. Return to the guide. It automatically tries the Mac link. **Open My Mac** is also available if the browser blocks the automatic check. Instruction cards do not certify that an app was installed or an OS prompt was approved.
 4. Save **My Mac** as a bookmark or use Safari **Share → Add to Home Screen**. Use the same saved link next time.
 
 The first guide is available on the Mac's current Wi-Fi network and expires after 15 minutes. If you are already on another network, use **Get the connection app**, sign in and allow VPN, then scan **Open My Mac**. No administrator API or auth key is required for the normal same-account flow.
+
+**Resume setup** brings the required connection app or macOS step forward and checks its current state. **Check installation** reconciles an earlier installation after RetroStats restarts. Cancel a download in RetroStats; cancel administrator authorization in the macOS prompt. An authorized package installation runs to completion before another attempt. A failed or interrupted installation with an unconfirmed app stays in an attention state and will not be replaced silently.
+
+If the helper shows **Restart Mac required**, macOS is still removing a previous Tailscale extension. Restart your Mac before resuming; RetroStats does not reboot it or start a second installation while that removal is pending. Opening settings, submitting an activation request, or an instruction card does not count as approval or sign-in.
 
 RetroStats identifies an iPhone/iPad only after observing its request at the Mac's Tailscale address and matching exactly one visible, untagged mobile device owned by the same Tailscale user. Multiple or hidden identities can require a device choice or administrator help. No new device is approved automatically. A visible/online device, QR scan or local Mac probe alone does not confirm the phone path.
 

@@ -83,6 +83,14 @@ import SwiftUI
         let view = TailscalePanel(controller: .preview(state: state), renderOnly: true).padding(20).frame(width: 400, height: 760, alignment: .topLeading).environment(\.colorScheme, .light)
         try render(view, to: directory.appendingPathComponent("state-\(state.rawValue.replacingOccurrences(of: "/", with: "-")).png"))
     }
+    for (stage, slug) in [(TailscaleSetupStage.authorizing, "authorize"), (.installing, "installing"), (.installationPending, "pending"), (.extensionApproval, "extension"), (.vpnApproval, "vpn"), (.signIn, "signin"), (.failed, "failed"), (.rebootRequired, "reboot")] {
+        let setup = TailscaleController.setupPreview(stage: stage)
+        let session = MobileSetupSession.preview(snapshot: setup.snapshot, services: setup.services, language: .en)
+        for (scheme, name) in [(ColorScheme.light, "light"), (.dark, "dark")] {
+            let view = MobileSetupView(controller: setup, session: session).frame(width: 360, height: 800).environment(\.colorScheme, scheme)
+            try renderNative(view, scheme: scheme, size: CGSize(width: 360, height: 800), to: directory.appendingPathComponent("setup-\(slug)-\(name)-minimum.png"))
+        }
+    }
     for (width, name) in [(CGFloat(360), "minimum"), (CGFloat(680), "wide")] {
         let view = TailscaleAdvancedView(controller: controller).frame(width: width, height: 1000).environment(\.colorScheme, .light)
         try renderNative(view, scheme: .light, size: CGSize(width: width, height: 1000), to: directory.appendingPathComponent("manage-light-\(name).png"))
@@ -92,13 +100,19 @@ import SwiftUI
 /// Native ScrollView/TextEditor/Picker need an AppKit host; ImageRenderer omits them.
 /// The window is never ordered on screen and has no app delegate or service startup.
 @MainActor private func renderNative<Content: View>(_ content: Content, scheme: ColorScheme, size: CGSize, to target: URL) throws {
-    let view = NSHostingView(rootView: content.background(Color(nsColor: .windowBackgroundColor)))
+    let palette = RetroPalette(finish: .ivory, scheme: scheme)
+    let view = NSHostingView(rootView: content.background(Color(nsColor: .windowBackgroundColor)).environment(\.retroPalette, palette).foregroundStyle(palette.ink))
     let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: .borderless, backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
     window.contentView = view; view.frame = CGRect(origin: .zero, size: size)
     window.displayIfNeeded(); view.layoutSubtreeIfNeeded()
     RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    // SwiftUI may finish a button label after the first offscreen draw. Warm the host,
+    // then capture a settled frame; this never orders the window or operates its controls.
+    if let warm = view.bitmapImageRepForCachingDisplay(in: view.bounds) { view.cacheDisplay(in: view.bounds, to: warm) }
+    RunLoop.current.run(until: Date().addingTimeInterval(0.1))
+    view.layoutSubtreeIfNeeded(); window.displayIfNeeded()
     guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { throw CocoaError(.fileWriteUnknown) }
     view.cacheDisplay(in: view.bounds, to: bitmap)
     guard let png = bitmap.representation(using: .png, properties: [:]) else { throw CocoaError(.fileWriteUnknown) }

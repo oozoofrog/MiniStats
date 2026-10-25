@@ -11,9 +11,9 @@ struct TailscalePanel: View {
     init(controller: TailscaleController, renderOnly: Bool = false) { self.controller = controller; self.access = controller.access; self.renderOnly = renderOnly }
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            RetroSectionHeading(title: "MY MAC", detail: access.phase.rawValue.uppercased())
+            RetroSectionHeading(title: "MY MAC", detail: (showConnectionSetup ? controller.setupStage.rawValue : access.phase.rawValue).uppercased())
             MacAccessDotArt(scene: access.mobileName.isEmpty ? .macGuide : .ready).frame(height: 86).accessibilityHidden(true)
-            Text(access.phase == .ready ? "Your Mac is ready. Open it on your phone or iPad." : "Reach your Mac from your phone or iPad.").fixedSize(horizontal: false, vertical: true)
+            Text(access.phase == .ready ? "Your Mac is ready. Open it on your phone or iPad." : showConnectionSetup ? controller.setupStage.detail : "Reach your Mac from your phone or iPad.").fixedSize(horizontal: false, vertical: true)
             if !access.mobileName.isEmpty { Text("Connected: " + access.mobileName).fixedSize(horizontal: false, vertical: true) }
             Button(access.enabled ? "Continue setup" : "Start access") { controller.beginAccess(); controller.startMobile(); helper = true }.disabled(controller.busy)
             Button("Advanced management") { management = true }
@@ -22,6 +22,7 @@ struct TailscalePanel: View {
         .sheet(isPresented: $helper, onDismiss: { controller.mobile.end() }) { MobileSetupView(controller: controller, session: controller.mobile) }
         .sheet(isPresented: $management) { TailscaleAdvancedView(controller: controller) }
     }
+    private var showConnectionSetup: Bool { access.enabled && ![.ready, .incomingBlocked, .paused, .accountChanged, .conflict].contains(access.phase) }
 }
 
 struct MobileSetupView: View {
@@ -43,9 +44,15 @@ struct MobileSetupView: View {
                     Text(statusDetail).fixedSize(horizontal: false, vertical: true)
                     if access.phase == .incomingBlocked { Button("Allow Mac access") { controller.allowAccessIncoming() }.disabled(controller.busy) }
                     if controller.busy { ProgressView().accessibilityLabel("Preparing Mac access") }
-                    if access.phase == .install { Button("Install connection app") { controller.installAccessClient() }.disabled(controller.busy) }
-                    else if [.login, .approval, .deviceApproval, .unavailable, .paused].contains(access.phase) { Button("Continue") { controller.beginAccess() }.disabled(controller.busy) }
-                    if access.phase == .approval { Button("Allow in System Settings") { if !controller.isFixture { NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences")!) } } }
+                    if showConnectionSetup {
+                        if [.install, .cancelled, .failed].contains(controller.setupStage), controller.installation == nil, !controller.hasPendingInstallation {
+                            Button("Install connection app") { controller.installAccessClient() }.disabled(controller.busy)
+                        } else {
+                            Button(controller.hasPendingInstallation ? "Check installation" : controller.setupStage == .signIn ? "Open sign-in" : "Resume setup") { controller.resumeSetup() }.disabled(controller.busy || controller.setupStage == .rebootRequired)
+                        }
+                        if controller.setupStage == .extensionApproval { Button("Open Network Extensions") { controller.openExtensionSettings() }.disabled(controller.busy) }
+                        if [.downloading, .verifying].contains(controller.setupStage) { Button("Cancel download") { controller.cancel() } }
+                    } else if access.phase == .paused { Button("Continue") { controller.beginAccess() }.disabled(controller.busy) }
                     if access.phase == .ready {
                         if access.mobileName.isEmpty {
                             Text("Sign-in account").font(.bitmap(11))
@@ -102,11 +109,13 @@ struct MobileSetupView: View {
             if let service = proxy { Button("Share this web app") { controller.proxyAccessWeb(service); proxy = nil } }
         }
     }
-    private var statusTitle: String { !access.mobileName.isEmpty ? "Device connection checked" : access.phase == .ready ? "Set Up a Device" : access.phase.rawValue }
+    private var showConnectionSetup: Bool { access.enabled && ![.ready, .incomingBlocked, .paused, .accountChanged, .conflict].contains(access.phase) }
+    private var statusTitle: String { showConnectionSetup ? controller.setupStage.rawValue : !access.mobileName.isEmpty ? "Device connection checked" : access.phase == .ready ? "Set Up a Device" : access.phase.rawValue }
     private var statusDetail: String {
+        if showConnectionSetup { return controller.setupStage.detail }
         switch access.phase {
         case .off: return "Start access once to prepare your Mac."
-        case .install: return "Approve the verified installer when it opens."
+        case .install: return "Install the connection app here."
         case .login: return "Sign in in the connection app. We continue automatically."
         case .approval: return "Allow the connection app in the macOS prompt."
         case .deviceApproval: return "Your administrator needs to approve this Mac."

@@ -8,6 +8,8 @@ import Foundation
     @Published private(set) var preferences = TailscalePreferences()
     @Published private(set) var traffic = TailscaleTraffic()
     @Published private(set) var busy = false
+    @Published private(set) var setupStage: TailscaleSetupStage = .install
+    @Published private(set) var setupObservation = TailscaleSetupObservation()
     @Published private(set) var refreshedAt: Date?
     @Published var message = ""
     @Published var diagnosticResult = ""
@@ -25,6 +27,17 @@ import Foundation
     private(set) lazy var access = MacAccessCoordinator(defaults: defaults)
     let mobile: MobileSetupSession
     private let executor: any TailscaleExecuting
+    private let installer: any TailscaleInstalling
+    private let openSurface: (URL) -> Bool
+    private var installJob: TailscaleInstallJob?
+    private var setupRequested = false
+    private var resumingSetup = false
+    private var collectorsStopped = false
+    private var pollingNeedsUpdate = false
+    private var attemptedSetup = Set<String>()
+    private var installMonitor: Task<Void, Never>?
+    var hasPendingInstallation: Bool { installJob != nil }
+    var isCollecting: Bool { polling != nil }
     private let detect: () -> TailscaleInstallation?
     private let store: any TailscaleCredentialStore
     private let makeAPI: (String, String) -> TailscaleAdminAPI
@@ -36,8 +49,10 @@ import Foundation
     private var generation = 0, networkActive = false, fixture: Bool
     private var polling: Task<Void, Never>?, operation: Task<Void, Never>?
     private var wakeObserver: NSObjectProtocol?
-    init(executor: any TailscaleExecuting = TailscaleCLI(), detect: @escaping () -> TailscaleInstallation? = { .detect() }, store: any TailscaleCredentialStore = TailscaleKeychain(), mobile: MobileSetupSession? = nil, defaults: UserDefaults = .standard, fixture: Bool = false, access: MacAccessCoordinator? = nil, makeAPI: @escaping (String, String) -> TailscaleAdminAPI = { TailscaleAdminAPI(tailnet: $0, credential: $1) }) {
+    init(executor: any TailscaleExecuting = TailscaleCLI(), detect: @escaping () -> TailscaleInstallation? = { .detect() }, store: any TailscaleCredentialStore = TailscaleKeychain(), mobile: MobileSetupSession? = nil, defaults: UserDefaults = .standard, fixture: Bool = false, access: MacAccessCoordinator? = nil, installer: any TailscaleInstalling = TailscaleNativeInstaller(), openSurface: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }, makeAPI: @escaping (String, String) -> TailscaleAdminAPI = { TailscaleAdminAPI(tailnet: $0, credential: $1) }) {
         self.executor = executor; self.detect = detect; self.store = store; self.makeAPI = makeAPI; self.defaults = defaults; self.fixture = fixture
+        self.installer = installer; self.openSurface = openSurface
+        if !fixture { installJob = defaults.data(forKey: "tailscaleInstallJob").flatMap { try? JSONDecoder().decode(TailscaleInstallJob.self, from: $0) }; if installJob != nil { setupStage = .installationPending } }
         self.mobile = mobile ?? MobileSetupSession()
         favorites = Set(defaults.stringArray(forKey: "tailscaleFavorites") ?? [])
         services = defaults.data(forKey: "tailscaleServices").flatMap { try? JSONDecoder().decode([TailscaleService].self, from: $0) } ?? TailscaleService.defaults
@@ -56,25 +71,30 @@ import Foundation
             }
         }
     }
-    deinit { polling?.cancel(); operation?.cancel(); if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) } }
+    deinit { polling?.cancel(); operation?.cancel(); installMonitor?.cancel(); if let wakeObserver { NSWorkspace.shared.notificationCenter.removeObserver(wakeObserver) } }
     func setNetworkActive(_ active: Bool) {
         if active != networkActive { polling?.cancel(); polling = nil }
         networkActive = active; updatePolling()
     }
     private func updatePolling() {
-        guard !fixture else { return }
-        if networkActive || mobile.active || access.wantsConnection {
+        guard !fixture, !collectorsStopped else { return }
+        if networkActive || mobile.active || access.wantsConnection || installJob != nil {
             guard polling == nil else { return }
             polling = Task { [weak self] in
                 while !Task.isCancelled {
                     guard let self else { return }
                     await self.refresh()
-                    try? await Task.sleep(for: .seconds(self.networkActive || self.mobile.active ? 3 : 15))
+                    try? await Task.sleep(for: .seconds(self.networkActive || self.mobile.active || self.installJob != nil ? 3 : 15))
                 }
             }
         } else {
-            polling?.cancel(); polling = nil; generation += 1; traffic.reset()
+            if polling != nil { polling?.cancel(); polling = nil; generation += 1; traffic.reset() }
         }
+    }
+    /// Stop collection without changing the saved access policy or cancelling an authorized installer.
+    func stopCollectors() {
+        collectorsStopped = true; polling?.cancel(); polling = nil; generation += 1; traffic.reset()
+        installMonitor?.cancel(); installMonitor = nil
     }
     func wake() { traffic.reset(); access.wake(); if networkActive || mobile.active || access.wantsConnection { Task { await refresh() } } }
     private func cli(_ arguments: [String], timeout: TimeInterval = 12) async throws -> TailscaleCommandResult {
@@ -86,17 +106,61 @@ import Foundation
         busy = true; let token = generation
         defer {
             busy = false
+            if installJob == nil, !setupStage.installInFlight {
+                let observed = setupObservation.stage(installation: installation, snapshot: snapshot)
+                if observed != .install || ![.failed, .cancelled].contains(setupStage) { setupStage = observed }
+            }
             if !fixture, access.enabled, generation == token, !Task.isCancelled { Task { [weak self] in await self?.driveAccess() } }
+            if pollingNeedsUpdate { pollingNeedsUpdate = false; updatePolling() }
+        }
+        if let job = installJob {
+            let progress = installer.progress(job: job)
+            if progress == "installing" {
+                let active = await installer.authorizationActive(job: job, executor: executor)
+                if active != false { setupStage = .installing; return }
+                if !(await installer.confirmed(executor: executor)) {
+                    setupStage = .failed; message = "Installation was interrupted and is not confirmed. Resume to verify or retry after repairing any partial app."
+                    if detect() == nil { saveInstallJob(nil) }
+                    return
+                }
+            }
+            if await installer.confirmed(executor: executor) {
+                saveInstallJob(nil); setupStage = .unavailable; message = ""
+            } else if progress?.hasPrefix("failed:") == true {
+                setupStage = .failed
+                if detect() != nil {
+                    message = "Installation failed and left an unconfirmed app. Resume to verify it; repair or remove it before reinstalling."
+                    return
+                }
+                saveInstallJob(nil); message = "Installation did not finish. Choose Install to try again."
+            } else {
+                if progress == "finished" {
+                    setupStage = .failed
+                    message = "Installation ended, but its bundle, signature and receipt are not confirmed. Resume to check again; an existing client will not be replaced."
+                } else {
+                    let active = await installer.authorizationActive(job: job, executor: executor)
+                    setupStage = active == true ? .authorizing : .installationPending
+                    message = active == true ? "Finish or cancel the existing macOS administrator prompt." : "Installation is not confirmed. Resume to reconcile it before retrying."
+                }
+                return
+            }
         }
         let detected = detect()
         if installation != detected {
-            installation = detected; capabilities = .init(); preferences = .init(); traffic.reset()
+            installation = detected; capabilities = .init(); preferences = .init(); setupObservation = .init(); traffic.reset(); attemptedSetup.removeAll(); openedClientPath = ""; openedAccessState = ""
         }
-        guard let detected else { snapshot = .init(); return }
+        guard let detected else {
+            snapshot = .init()
+            if access.wantsConnection {
+                if let extensions = try? await executor.run(executable: "/usr/bin/systemextensionsctl", arguments: ["list"], timeout: 5), extensions.status == 0 {
+                    setupObservation.extensionState = TailscaleSetupObservation.extensionState(extensions.text)
+                }
+            }
+            return
+        }
         if access.wantsConnection, let path = detected.appPath, openedClientPath != path {
             openedClientPath = path
-            let configuration = NSWorkspace.OpenConfiguration(); configuration.activates = false
-            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: path), configuration: configuration) { _, _ in }
+            _ = openSurface(URL(fileURLWithPath: path))
         }
         do {
             if capabilities.variant == .unknown {
@@ -107,14 +171,33 @@ import Foundation
                     let help = result.text + String(decoding: result.stderr, as: UTF8.self)
                     if result.status == 0 && !help.lowercased().contains("unknown subcommand") { capabilities.help[command] = help }
                 }
+                if detected.appPath != nil {
+                    for command in ["sysext", "mac-vpn"] {
+                        let result = try await cli(["configure", command, "--help"], timeout: 4)
+                        let help = result.text + String(decoding: result.stderr, as: UTF8.self)
+                        if result.status == 0 && !help.lowercased().contains("unknown subcommand") { capabilities.help["configure " + command] = help }
+                    }
+                }
                 guard generation == token else { return }; self.capabilities = capabilities
+            }
+            if access.wantsConnection {
+                var observation = TailscaleSetupObservation()
+                if detected.variant != .appStore {
+                    let result = try await executor.run(executable: "/usr/bin/systemextensionsctl", arguments: ["list"], timeout: 5)
+                    if result.status == 0 { observation.extensionState = TailscaleSetupObservation.extensionState(result.text) }
+                }
+                if detected.appPath != nil {
+                    let vpn = try await executor.run(executable: "/usr/sbin/scutil", arguments: ["--nc", "list"], timeout: 5)
+                    if vpn.status == 0 { observation.vpnPresent = TailscaleSetupObservation.vpnPresent(vpn.text) }
+                }
+                guard generation == token else { return }; setupObservation = observation
             }
             let result = try await cli(["status", "--json"])
             if result.status != 0 {
                 guard generation == token, !Task.isCancelled else { return }
                 let error = String(decoding: result.stderr, as: UTF8.self).lowercased()
                 snapshot = .init(); snapshot.state = TailscaleSnapshot.commandFailureState(error)
-                message = "Status unavailable. Open the official client and check extension approval / permissions."; traffic.reset(); return
+                message = "Connection setup is pending. Resume below to open the required macOS step."; traffic.reset(); return
             }
             let status = try TailscaleSnapshot.parse(result.stdout)
             var prefs = TailscalePreferences()
@@ -132,6 +215,7 @@ import Foundation
             guard status.identity == finalStatus.identity else {
                 traffic.reset(); preferences = .init(); accounts = []; shares = []; diagnosticResult = ""
                 mobile.end(); snapshot = finalStatus
+                setupObservation = .init(); attemptedSetup.removeAll()
                 message = "Account changed during collection. Discarded stale settings; refreshing on the next sample."
                 return
             }
@@ -161,7 +245,10 @@ import Foundation
             self.busy = false; await self.refresh()
         }
     }
-    func cancel() { operation?.cancel() }
+    func cancel() {
+        if [.authorizing, .installing, .installationPending].contains(setupStage) { message = "Cancel in the macOS prompt before installation starts. An authorized installation must finish before retrying."; return }
+        operation?.cancel()
+    }
     func connection(_ connected: Bool) { if !connected { access.pause() }; action { _ = try await self.cli([connected ? "up" : "down"], timeout: 20).checked() } }
     func logout() { access.pause(); mobile.end(); action { _ = try await self.cli(["logout"]).checked() } }
     func set(_ name: String, _ value: String) {
@@ -244,30 +331,139 @@ import Foundation
     }
     func beginAccess() {
         guard !fixture else { return }
+        setupRequested = true; attemptedSetup.removeAll()
         do { try access.enable(); access.changed = { [weak self] in self?.updatePolling() }; updatePolling() }
         catch { message = "Saved link unavailable. Reissue the access link on this Mac."; return }
         Task { await refresh(); await driveAccess(openRequired: true) }
     }
     private func driveAccess(openRequired: Bool = false) async {
         guard !fixture, access.enabled else { return }
+        if installJob != nil || setupStage.installInFlight { return }
         if snapshot.state == .connected && preferences.bool("shields-up") == true { access.blockIncoming(); return }
         await access.update(snapshot: snapshot, configured: services)
         mobile.accessURL = access.url
         guard access.wantsConnection else { return }
+        if setupRequested, !busy, [.extensionApproval, .vpnApproval].contains(setupStage) {
+            let key = (installation?.executable ?? "") + setupStage.rawValue
+            if !attemptedSetup.contains(key) { attemptedSetup.insert(key); performSetupStep(); return }
+        }
+        if [.extensionApproval, .vpnApproval, .rebootRequired].contains(setupStage) { return }
         if snapshot.state == .disconnected && !busy && access.shouldReconnect() {
             connection(true)
         } else if openRequired || openedAccessState != (installation?.executable ?? "") + snapshot.state.rawValue {
             openedAccessState = (installation?.executable ?? "") + snapshot.state.rawValue
-            if let authURL = snapshot.authURL { NSWorkspace.shared.open(authURL) }
-            else if let path = installation?.appPath, snapshot.state != .connected { NSWorkspace.shared.open(URL(fileURLWithPath: path)) }
+            if let authURL = snapshot.authURL { _ = openSurface(authURL) }
+            else if let path = installation?.appPath, snapshot.state != .connected { _ = openSurface(URL(fileURLWithPath: path)) }
         }
     }
     func installAccessClient() {
-        guard !fixture, !busy, installation == nil else { return }
-        action {
-            let package = try await TailscaleInstaller.acquire(executor: self.executor)
-            guard NSWorkspace.shared.open(package) else { throw TailscaleFailure.invalid("Verified package is ready but Installer could not open it.") }
+        guard !fixture, !busy, installJob == nil, detect() == nil, setupStage != .rebootRequired else { return }
+        busy = true; generation += 1; setupRequested = true; message = ""
+        operation = Task { [weak self] in
+            guard let self else { return }
+            var package: URL?
+            defer {
+                self.installMonitor?.cancel(); self.installMonitor = nil; self.busy = false; self.operation = nil
+                if self.pollingNeedsUpdate { self.pollingNeedsUpdate = false; self.updatePolling() }
+            }
+            do {
+                let acquired = try await self.installer.acquire(executor: self.executor) { [weak self] stage in await self?.receiveSetupProgress(stage) }
+                package = acquired
+                try Task.checkCancellation()
+                guard self.detect() == nil else { throw TailscaleFailure.invalid("A client was installed during preparation. Resume its setup.") }
+                let job = TailscaleInstallJob(id: UUID()); self.saveInstallJob(job)
+                self.setupStage = .authorizing
+                self.installMonitor = Task { [weak self] in
+                    while !Task.isCancelled {
+                        guard let self else { return }
+                        if self.installer.progress(job: job) == "installing" { self.setupStage = .installing }
+                        try? await Task.sleep(for: .milliseconds(500))
+                    }
+                }
+                let outcome = try await self.installer.install(package: acquired, job: job, executor: self.executor)
+                self.setupStage = .installationPending
+                switch outcome {
+                case .cancelled, .denied:
+                    self.saveInstallJob(nil); self.setupStage = outcome == .cancelled ? .cancelled : .failed
+                    self.message = outcome == .cancelled ? "Administrator authorization was cancelled. Nothing was confirmed installed." : "Administrator authorization was denied. Choose Install to try again."
+                case .failed:
+                    self.message = "Installation failed. Checking the installed app before another attempt."
+                    if self.installer.progress(job: job) != "installing", self.detect() == nil { self.saveInstallJob(nil); self.setupStage = .failed }
+                case .completed, .pending: break
+                }
+                if outcome != .pending { self.installer.discard(package: acquired); package = nil }
+            } catch {
+                if self.installJob == nil { self.setupStage = (error as? TailscaleFailure == .cancelled || error is CancellationError) ? .cancelled : .failed }
+                else { self.setupStage = .installationPending }
+                self.message = error.localizedDescription
+            }
+            if let package, self.installJob == nil { self.installer.discard(package: package) }
+            self.busy = false
+            await self.refresh()
         }
+    }
+    private func saveInstallJob(_ job: TailscaleInstallJob?) {
+        installJob = job
+        if let job, let data = try? JSONEncoder().encode(job) { defaults.set(data, forKey: "tailscaleInstallJob") }
+        else { defaults.removeObject(forKey: "tailscaleInstallJob") }
+        if job != nil { updatePolling() }
+        else { pollingNeedsUpdate = true }
+    }
+    private func receiveSetupProgress(_ stage: TailscaleSetupStage) { setupStage = stage }
+    func resumeSetup() {
+        guard !fixture, !busy, !resumingSetup else { return }
+        resumingSetup = true; busy = true; generation += 1
+        setupRequested = true; attemptedSetup.removeAll(); message = ""
+        Task {
+            defer { self.resumingSetup = false }
+            if let job = installJob, installer.progress(job: job) == nil, !(await installer.confirmed(executor: executor)) {
+                let active = await installer.authorizationActive(job: job, executor: executor)
+                guard active == false else {
+                    setupStage = active == true ? .authorizing : .installationPending
+                    message = active == true ? "Finish or cancel the existing macOS administrator prompt." : "The previous installation is not yet reconciled. Resume when its macOS prompt has closed."
+                    busy = false; return
+                }
+                // Absence is established from this job's authorization process plus its root result.
+                // The root lock also serializes an orphaned privileged child across app restarts.
+                saveInstallJob(nil); setupStage = .install
+            }
+            if let job = installJob, installer.progress(job: job) == "finished", detect() == nil, !(await installer.confirmed(executor: executor)) {
+                saveInstallJob(nil); setupStage = .failed
+            }
+            busy = false
+            await refresh()
+            if installation == nil, installJob == nil, setupStage != .rebootRequired { installAccessClient() }
+            else { await driveAccess(openRequired: true) }
+        }
+    }
+    private func performSetupStep() {
+        guard !fixture, !busy, let installation else { return }
+        if let path = installation.appPath { _ = openSurface(URL(fileURLWithPath: path)) }
+        let stage = setupStage
+        let command = stage == .extensionApproval ? "sysext" : "mac-vpn"
+        let action = stage == .extensionApproval ? "activate" : "install"
+        guard capabilities.configure(command, action: action) else {
+            if stage == .extensionApproval { openExtensionSettings() }
+            else { message = "Choose Allow in the connection app’s VPN prompt, then resume here." }
+            return
+        }
+        busy = true; generation += 1
+        operation = Task {
+            defer { self.busy = false; self.operation = nil }
+            do {
+                let result = try await self.cli(["configure", command, action], timeout: 30)
+                let output = (result.text + String(decoding: result.stderr, as: UTF8.self)).lowercased()
+                if result.status != 0 || output.contains("unsupported") || output.contains("cancelled") || output.contains("denied") {
+                    self.message = "The macOS step is still pending. Complete it in the connection app, then resume here."
+                }
+            } catch { self.message = "The macOS step is not confirmed. Finish its prompt, then resume here." }
+            if stage == .extensionApproval { self.openExtensionSettings() }
+            self.busy = false; await self.refresh()
+        }
+    }
+    func openExtensionSettings() {
+        guard !fixture else { return }
+        if !openSurface(URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences")!) { message = "Open System Settings → General → Login Items & Extensions → Network Extensions, then turn on Tailscale." }
     }
     func allowAccessIncoming() {
         guard !fixture else { return }
@@ -349,6 +545,24 @@ import Foundation
         for command in ["set", "get", "switch", "file", "serve", "funnel", "metrics"] { controller.capabilities.help[command] = "--accept-dns --accept-routes --shields-up --exit-node --exit-node-allow-lan-access --advertise-exit-node --advertise-routes --bg --https --set-path" }
         controller.preferences = .init(values: ["accept-dns": true, "accept-routes": false, "shields-up": false, "exit-node": "", "exit-node-allow-lan-access": false, "advertise-exit-node": false, "advertise-routes": ""])
         if state == .notInstalled { controller.installation = nil; controller.snapshot = .init() }
+        controller.setupStage = controller.setupObservation.stage(installation: controller.installation, snapshot: controller.snapshot)
+        return controller
+    }
+    static func setupPreview(stage: TailscaleSetupStage) -> TailscaleController {
+        let connection: TailscaleConnection
+        switch stage {
+        case .signIn: connection = .signedOut
+        case .extensionApproval, .vpnApproval: connection = .extensionApproval
+        case .deviceApproval: connection = .deviceApproval
+        case .connecting, .unavailable: connection = .connecting
+        case .ready: connection = .connected
+        default: connection = .notInstalled
+        }
+        let controller = preview(state: connection)
+        controller.busy = [.downloading, .verifying, .authorizing, .installing].contains(stage)
+        if [.authorizing, .installing, .installationPending, .failed].contains(stage) { controller.installJob = .init(id: UUID()) }
+        if stage == .failed { controller.message = "Installation ended, but its app and receipt are not confirmed. Resume to check again." }
+        controller.setupStage = stage
         return controller
     }
 }

@@ -10,6 +10,205 @@ private func tsThrows(_ expected: TailscaleFailure, _ work: () async throws -> V
     catch let failure as TailscaleFailure { try tsRequire(failure == expected, "Wrong typed failure") }
 }
 
+/// All setup command responses and native-surface openings are injected; no real installer,
+/// osascript, vendor app, authorization, settings, VPN, or Keychain is touched by these tests.
+private final class SetupFixtureInstaller: TailscaleInstalling, @unchecked Sendable {
+    private let lock = NSLock()
+    private var acquireCalls = 0, installCalls = 0, activeCalls = 0
+    private var installed = false
+    private var progressValue: String?
+    private var activeValue: Bool?
+    private var temporaryFolders: [URL] = []
+    let outcome: TailscaleInstallOutcome
+    let delay: TimeInterval
+    var onInstall: @Sendable () async -> Void = {}
+    init(_ outcome: TailscaleInstallOutcome = .pending, progress: String? = nil, active: Bool? = false, confirmed: Bool = false, delay: TimeInterval = 0) {
+        self.outcome = outcome; progressValue = progress; activeValue = active; installed = confirmed; self.delay = delay
+    }
+    var counts: (acquire: Int, install: Int, active: Int) { lock.withLock { (acquireCalls, installCalls, activeCalls) } }
+    deinit { for folder in temporaryFolders { try? FileManager.default.removeItem(at: folder) } }
+    func setConfirmed(_ value: Bool) { lock.withLock { installed = value } }
+    func setActive(_ value: Bool?) { lock.withLock { activeValue = value } }
+    func acquire(executor: any TailscaleExecuting, progress: @escaping @Sendable (TailscaleSetupStage) async -> Void) async throws -> URL {
+        lock.withLock { acquireCalls += 1 }
+        await progress(.downloading); await progress(.verifying)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("RetroStats-Setup-Fixture-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+        lock.withLock { temporaryFolders.append(folder) }
+        let package = folder.appendingPathComponent("Tailscale-1.102.4-macos.pkg")
+        try Data("fixture package never executed".utf8).write(to: package)
+        return package
+    }
+    func install(package: URL, job: TailscaleInstallJob, executor: any TailscaleExecuting) async throws -> TailscaleInstallOutcome {
+        lock.withLock { installCalls += 1 }
+        if delay > 0 { try await Task.sleep(for: .seconds(delay)) }
+        await onInstall()
+        return outcome
+    }
+    func confirmed(executor: any TailscaleExecuting) async -> Bool { lock.withLock { installed } }
+    func progress(job: TailscaleInstallJob) -> String? { lock.withLock { progressValue } }
+    func authorizationActive(job: TailscaleInstallJob, executor: any TailscaleExecuting) async -> Bool? {
+        lock.withLock { activeCalls += 1 }
+        if delay > 0 { try? await Task.sleep(for: .seconds(delay)) }
+        return lock.withLock { activeValue }
+    }
+    func discard(package: URL) { try? FileManager.default.removeItem(at: package.deletingLastPathComponent()) }
+}
+
+private actor SetupFixtureExecutor: TailscaleExecuting {
+    var calls: [(String, [String])] = []
+    let extensions: String
+    let backend: String
+    let statusFailure: Bool
+    init(extensions: String = "", backend: String = "NeedsLogin", statusFailure: Bool = false) { self.extensions = extensions; self.backend = backend; self.statusFailure = statusFailure }
+    func run(executable: String, arguments: [String], timeout: TimeInterval) async throws -> TailscaleCommandResult {
+        calls.append((executable, arguments))
+        var output = "", error = "", code: Int32 = 0
+        if executable == "/usr/bin/systemextensionsctl" { output = extensions }
+        else if executable == "/usr/sbin/scutil" { output = "" }
+        else if arguments == ["configure", "sysext", "--help"] { output = "Usage: tailscale configure sysext [activate|deactivate|status]" }
+        else if arguments == ["configure", "mac-vpn", "--help"] { output = "Usage: tailscale configure mac-vpn [install|uninstall]" }
+        else if arguments.last == "--help" { code = 1; error = "unknown subcommand" }
+        else if arguments == ["status", "--json"] {
+            if statusFailure { code = 1; error = "Is Tailscale running?" }
+            else { output = "{\"BackendState\":\"\(backend)\",\"Self\":{\"ID\":\"fixture\",\"TailscaleIPs\":[\"100.64.0.1\"]}}" }
+        } else if arguments == ["configure", "mac-vpn", "install"] { output = "Unsupported on this app variant" }
+        else if arguments == ["configure", "sysext", "activate"] { output = "System extension activation request submitted." }
+        return .init(stdout: Data(output.utf8), stderr: Data(error.utf8), status: code)
+    }
+}
+
+@MainActor private func setupFlowSelfTest() async throws {
+    let enabled = "* * W5364U7YZB io.tailscale.ipn.macsys.network-extension (1.102.4) Tailscale [activated enabled]"
+    let removal = "W5364U7YZB io.tailscale.ipn.macsys.network-extension (1.102.4) Tailscale [terminated waiting to uninstall on reboot]"
+    let installation = TailscaleInstallation(executable: "/fixture/Tailscale", appPath: "/fixture/Tailscale.app", variant: .standalone)
+    try tsRequire(TailscaleSetupObservation.extensionState(enabled) == .enabled, "Exact vendor extension enablement read-back")
+    try tsRequire(TailscaleSetupObservation.extensionState(enabled.replacingOccurrences(of: "W5364U7YZB", with: "WRONGTEAM")) == .absent, "Other vendor extension is not evidence")
+    try tsRequire(TailscaleSetupObservation.extensionState(enabled.replacingOccurrences(of: "network-extension", with: "network-extension.other")) == .absent, "Extension bundle ID must match exactly")
+    try tsRequire(TailscaleSetupObservation.extensionState(removal) == .removalPending, "Pending removal is distinct from absent/approved")
+    var observation = TailscaleSetupObservation(extensionState: .enabled, vpnPresent: false)
+    var snapshot = try TailscaleSnapshot.parse(Data(#"{"BackendState":"NeedsLogin"}"#.utf8))
+    try tsRequire(observation.stage(installation: installation, snapshot: snapshot) == .signIn, "Live backend sign-in state advances past stale extension UI")
+    snapshot.state = .extensionApproval
+    try tsRequire(observation.stage(installation: installation, snapshot: snapshot) == .vpnApproval, "Enabled extension does not loop on extension approval")
+    snapshot.state = .error
+    try tsRequire(observation.stage(installation: installation, snapshot: snapshot) == .vpnApproval, "Missing VPN evidence gives a distinct setup action")
+    observation.extensionState = .removalPending
+    try tsRequire(observation.stage(installation: nil, snapshot: .init()) == .rebootRequired, "Removal gates reinstall before a bundle exists")
+    var capabilities = TailscaleCapabilities(); capabilities.variant = .standalone
+    capabilities.help["configure sysext"] = "Usage: tailscale configure sysext [activate|deactivate|status]"
+    capabilities.help["configure mac-vpn"] = "Usage: tailscale configure mac-vpn [install|uninstall]"
+    try tsRequire(capabilities.configure("sysext", action: "activate") && capabilities.configure("mac-vpn", action: "install"), "Installed-help configure capability gating")
+    capabilities.variant = .appStore
+    try tsRequire(!capabilities.configure("sysext", action: "activate") && capabilities.configure("mac-vpn", action: "install"), "App Store never activates Standalone system extension")
+    capabilities.help["configure mac-vpn"] = "Unsupported on this app variant"
+    try tsRequire(!capabilities.configure("mac-vpn", action: "install"), "Unsupported result is not configure support")
+    try tsRequire(TailscaleCLI.environment["TAILSCALE_BE_CLI"] == "1", "Scripts force the official binary into CLI mode")
+
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent("RetroStats-Setup-Syntax-" + UUID().uuidString)
+    try FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let quotedPackage = temporary.appendingPathComponent("quote'$()`").appendingPathComponent("Tailscale-1.102.4-macos.pkg")
+    let syntaxJob = TailscaleInstallJob(id: UUID())
+    let command = try TailscaleInstaller.installCommand(package: quotedPackage, digest: String(repeating: "a", count: 64), job: syntaxJob)
+    let shellFile = temporary.appendingPathComponent("install-syntax.sh")
+    try command.write(to: shellFile, atomically: true, encoding: .utf8)
+    _ = try await TailscaleCLI().run(executable: "/bin/sh", arguments: ["-n", shellFile.path], timeout: 3).checked()
+    let payloadFile = temporary.appendingPathComponent("payload-syntax.sh")
+    try TailscaleInstaller.installationPayload(package: quotedPackage, digest: String(repeating: "a", count: 64), job: syntaxJob).write(to: payloadFile, atomically: true, encoding: .utf8)
+    _ = try await TailscaleCLI().run(executable: "/bin/sh", arguments: ["-n", payloadFile.path], timeout: 3).checked()
+    let appleFile = temporary.appendingPathComponent("authorize.applescript")
+    try TailscaleInstaller.authorizationScript.write(to: appleFile, atomically: true, encoding: .utf8)
+    _ = try await TailscaleCLI().run(executable: "/usr/bin/osacompile", arguments: ["-o", temporary.appendingPathComponent("authorize.scpt").path, appleFile.path], timeout: 3).checked()
+    try tsRequire(command.contains("/usr/sbin/installer -pkg") && command.contains("/usr/bin/shasum -a 256") && command.contains("/usr/sbin/spctl --assess") && command.contains("/private/var/run/RetroStats-Tailscale-Install.lock"), "Native install uses pinned bytes, privileged reassessment and a serialized job")
+    try tsRequire(!TailscaleInstaller.authorizationScript.contains("password ") && !command.contains("sudo "), "No credentials or silent sudo in authorization request")
+    let lockFile = temporary.appendingPathComponent("kernel-lock")
+    let runner = TailscaleCLI()
+    let held = Task { try await runner.run(executable: "/usr/bin/lockf", arguments: ["-k", "-s", "-t", "0", lockFile.path, "/bin/sleep", "0.3"], timeout: 2) }
+    for _ in 0..<30 { if FileManager.default.fileExists(atPath: lockFile.path) { break }; try await Task.sleep(for: .milliseconds(5)) }
+    let competing = try await runner.run(executable: "/usr/bin/lockf", arguments: ["-k", "-s", "-t", "0", lockFile.path, "/bin/echo", "must-not-execute"], timeout: 2)
+    try tsRequire(competing.status == 75 && competing.stdout.isEmpty, "Kernel lock prevents a competing payload from executing (user temporary file only)")
+    _ = try await held.value.checked()
+    let unlocked = try await runner.run(executable: "/usr/bin/lockf", arguments: ["-k", "-s", "-t", "0", lockFile.path, "/bin/echo", "released"], timeout: 2).checked()
+    try tsRequire(unlocked.text.trimmingCharacters(in: .whitespacesAndNewlines) == "released", "Completed process releases its kernel lock even though the file is kept")
+
+    var suites: [String] = [], controllers: [TailscaleController] = []
+    defer { controllers.forEach { $0.stopCollectors() }; for suite in suites { UserDefaults.standard.removePersistentDomain(forName: suite) } }
+    func defaults(_ suffix: String) -> UserDefaults {
+        let name = "RetroStats.SetupTest." + suffix + UUID().uuidString; suites.append(name)
+        return UserDefaults(suiteName: name)!
+    }
+    func access(_ defaults: UserDefaults) -> MacAccessCoordinator { MacAccessCoordinator(defaults: defaults, store: FixtureCredentials(), factory: { FixtureAccessServer(port: $0) }, probe: FixtureAccessProbe()) }
+    for outcome in [TailscaleInstallOutcome.cancelled, .denied] {
+        let settings = defaults("cancel"); let installer = SetupFixtureInstaller(outcome)
+        let executor = SetupFixtureExecutor()
+        let controller = TailscaleController(executor: executor, detect: { nil }, store: FixtureCredentials(), defaults: settings, access: access(settings), installer: installer, openSurface: { _ in false })
+        controllers.append(controller)
+        controller.installAccessClient(); controller.installAccessClient()
+        try await Task.sleep(for: .milliseconds(70))
+        try tsRequire(installer.counts.install == 1 && !controller.busy && !controller.hasPendingInstallation && !controller.isCollecting && controller.setupStage == (outcome == .cancelled ? .cancelled : .failed), "Cancelled/denied authorization remains retryable and stops inactive collection without generic success")
+        try tsRequire(!controller.message.contains("Operation completed"), "External setup never gets generic action success")
+    }
+    let pendingSettings = defaults("active")
+    let savedJob = TailscaleInstallJob(id: UUID())
+    pendingSettings.set(try JSONEncoder().encode(savedJob), forKey: "tailscaleInstallJob")
+    let pendingInstaller = SetupFixtureInstaller(active: true, delay: 0.08)
+    let pendingController = TailscaleController(executor: SetupFixtureExecutor(), detect: { nil }, store: FixtureCredentials(), defaults: pendingSettings, access: access(pendingSettings), installer: pendingInstaller, openSurface: { _ in false })
+    controllers.append(pendingController)
+    for _ in 0..<8 { pendingController.resumeSetup() }
+    try await Task.sleep(for: .milliseconds(120))
+    try tsRequire(pendingInstaller.counts.active == 1 && pendingInstaller.counts.acquire == 0 && pendingInstaller.counts.install == 0 && pendingController.hasPendingInstallation && pendingController.setupStage == .authorizing, "Rapid resume and restart retain a live authorization job; one reconciliation and no parallel prompt")
+    pendingInstaller.setActive(nil); pendingController.resumeSetup()
+    try await Task.sleep(for: .milliseconds(120))
+    try tsRequire(pendingController.hasPendingInstallation && pendingInstaller.counts.install == 0, "Unknown authorization evidence cannot trigger a new install")
+
+    for progress in ["finished", "failed:1", "installing"] {
+        let settings = defaults("terminal"); settings.set(try JSONEncoder().encode(TailscaleInstallJob(id: UUID())), forKey: "tailscaleInstallJob")
+        let installer = SetupFixtureInstaller(progress: progress)
+        let executor = SetupFixtureExecutor()
+        let controller = TailscaleController(executor: executor, detect: { installation }, store: FixtureCredentials(), defaults: settings, access: access(settings), installer: installer, openSurface: { _ in false })
+        controllers.append(controller)
+        await controller.refresh(); controller.resumeSetup()
+        try await Task.sleep(for: .milliseconds(50))
+        let calls = await executor.calls
+        try tsRequire(controller.setupStage == .failed && controller.hasPendingInstallation && installer.counts.acquire == 0 && !calls.contains(where: { $0.1 == ["status", "--json"] }), "Terminal unconfirmed partial app blocks normal CLI/login setup and replacement")
+        installer.setConfirmed(true); await controller.refresh()
+        try tsRequire(!controller.hasPendingInstallation && controller.installation == installation && controller.setupStage == .signIn, "Verified bundle/receipt recovery resumes the existing client")
+    }
+    let retrySettings = defaults("removed-partial")
+    retrySettings.set(try JSONEncoder().encode(TailscaleInstallJob(id: UUID())), forKey: "tailscaleInstallJob")
+    let retryInstaller = SetupFixtureInstaller(.cancelled, progress: "finished")
+    let retry = TailscaleController(executor: SetupFixtureExecutor(), detect: { nil }, store: FixtureCredentials(), defaults: retrySettings, access: access(retrySettings), installer: retryInstaller, openSurface: { _ in false })
+    controllers.append(retry)
+    await retry.refresh()
+    try tsRequire(retry.setupStage == .failed && retry.hasPendingInstallation, "Finished job without a bundle is attention, not installation completion")
+    retry.resumeSetup(); retry.resumeSetup()
+    try await Task.sleep(for: .milliseconds(70))
+    try tsRequire(retryInstaller.counts.acquire == 1 && retryInstaller.counts.install == 1 && retry.setupStage == .cancelled && !retry.hasPendingInstallation && !retry.isCollecting, "Terminal missing app offers one serialized retry and stops collection after cancellation")
+    let rebootSettings = defaults("reboot"), rebootInstaller = SetupFixtureInstaller()
+    let rebootAccess = access(rebootSettings)
+    try rebootAccess.enable()
+    let reboot = TailscaleController(executor: SetupFixtureExecutor(extensions: removal), detect: { nil }, store: FixtureCredentials(), defaults: rebootSettings, access: rebootAccess, installer: rebootInstaller, openSurface: { _ in false })
+    controllers.append(reboot)
+    await reboot.refresh(); reboot.installAccessClient(); reboot.resumeSetup()
+    try await Task.sleep(for: .milliseconds(40))
+    try tsRequire(reboot.setupStage == .rebootRequired && rebootInstaller.counts.acquire == 0 && rebootInstaller.counts.install == 0, "Pending uninstall blocks download, authorization and install without a reboot side effect")
+    rebootAccess.disable()
+
+    let vpnSettings = defaults("vpn"), vpnAccess = access(vpnSettings)
+    let vpnExecutor = SetupFixtureExecutor(extensions: enabled, statusFailure: true)
+    var surfaces: [URL] = []
+    let vpn = TailscaleController(executor: vpnExecutor, detect: { installation }, store: FixtureCredentials(), defaults: vpnSettings, access: vpnAccess, installer: SetupFixtureInstaller(), openSurface: { surfaces.append($0); return true })
+    controllers.append(vpn)
+    vpn.beginAccess()
+    try await Task.sleep(for: .milliseconds(100))
+    let vpnCalls = await vpnExecutor.calls
+    try tsRequire(vpn.setupStage == .vpnApproval && vpnCalls.contains(where: { $0.1 == ["configure", "mac-vpn", "install"] }) && !vpn.message.contains("Operation completed") && !surfaces.isEmpty, "Exit-zero unsupported VPN handoff stays pending; extension evidence outranks stale frontend")
+    try tsRequire(!vpnCalls.contains(where: { ["set", "serve", "funnel"].contains($0.1.first ?? "") && $0.1.last != "--help" }), "Setup preserves routes, sharing, Exit Node and unrelated preferences")
+    vpnAccess.disable()
+    print("PASS: observed setup, native-script syntax only, cancelled/denied authorization, rapid resume/restart, terminal partial install, reboot gate and unsupported VPN handoff (injected fixtures)")
+}
+
 actor TailscaleFixtureExecutor: TailscaleExecuting {
     var calls: [[String]] = []
     var state: Data
@@ -94,6 +293,7 @@ private final class FixtureGuide: MobileGuideServing {
 
 @MainActor private func tailscaleAsyncSelfTest() async throws {
     try installationFixtureSelfTest()
+    try await setupFlowSelfTest()
     let status = Data(#"{"BackendState":"Running","CurrentTailnet":{"Name":"example.test"},"Self":{"ID":"mac","UserID":1,"HostName":"Mac","TailscaleIPs":["100.64.0.1"]},"User":{"1":{"LoginName":"owner@example.test"}},"Peer":{"a":{"ID":"a","OS":"iOS","UserID":1,"HostName":"My iPhone","Online":true,"Active":true,"CurAddr":"192.0.2.1:4567","TailscaleIPs":["100.64.0.2"]},"b":{"ID":"b","OS":"iOS","UserID":2,"Tags":["tag:test"],"TailscaleIPs":["100.64.0.3"]}}}"#.utf8)
     let snapshot = try TailscaleSnapshot.parse(status)
     try await macAccessSelfTest(snapshot: snapshot)
@@ -317,6 +517,18 @@ private func installationFixtureSelfTest() throws {
     try Data("fixture never executed".utf8).write(to: cli)
     try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: cli.path)
     try tsRequire(TailscaleInstallation.detect(appPaths: [], cliPaths: [cli.path])?.variant == .cli, "CLI-only detection")
+    let wrapper = root.appendingPathComponent("official-wrapper")
+    try Data("#!/bin/sh\n/Applications/Tailscale.app/Contents/MacOS/Tailscale \"$@\"\n".utf8).write(to: wrapper)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: wrapper.path)
+    let wrapped = TailscaleInstallation.detect(appPaths: [], cliPaths: [wrapper.path], standaloneAppPath: app.path)
+    try tsRequire(wrapped?.variant == .appStore && wrapped?.appPath == app.path && wrapped?.executable == binary.path, "Regular vendor wrapper resolves the GUI variant without execution")
+    try FileManager.default.removeItem(at: receipt)
+    try tsRequire(TailscaleInstallation.detect(appPaths: [], cliPaths: [wrapper.path], standaloneAppPath: app.path)?.variant == .standalone, "Vendor wrapper identifies Standalone without a store receipt")
+    try tsRequire(TailscaleInstallation.detect(appPaths: [], cliPaths: [wrapper.path], standaloneAppPath: root.appendingPathComponent("Missing.app").path) == nil, "Orphan vendor wrapper is not a working CLI installation")
+    let custom = root.appendingPathComponent("custom-launcher")
+    try Data("#!/bin/sh\n/custom/tailscale \"$@\"\n".utf8).write(to: custom)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: custom.path)
+    try tsRequire(TailscaleInstallation.detect(appPaths: [], cliPaths: [custom.path])?.variant == .cli, "Unknown custom launchers remain preserved")
     try tsRequire(TailscaleInstallation.detect(appPaths: [], cliPaths: []) == nil, "Missing installation detection")
 }
 

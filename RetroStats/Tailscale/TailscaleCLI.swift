@@ -12,6 +12,7 @@ protocol TailscaleExecuting: Sendable {
 
 /// Every invocation owns both pipe readers and its deadline. No shell or inherited PATH.
 final class TailscaleCLI: TailscaleExecuting, @unchecked Sendable {
+    static var environment: [String: String] { ["LANG": "en_US.UTF-8", "HOME": FileManager.default.homeDirectoryForCurrentUser.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "TAILSCALE_BE_CLI": "1"] }
     let limit: Int
     init(limit: Int = 1_048_576) { self.limit = limit }
     func run(executable: String, arguments: [String], timeout: TimeInterval = 12) async throws -> TailscaleCommandResult {
@@ -44,7 +45,7 @@ private final class ProcessJob: @unchecked Sendable {
             self.process.arguments = arguments
             self.process.standardInput = FileHandle.nullDevice
             self.process.standardOutput = self.out; self.process.standardError = self.err
-            self.process.environment = ["LANG": "en_US.UTF-8", "HOME": FileManager.default.homeDirectoryForCurrentUser.path, "PATH": "/usr/bin:/bin:/usr/sbin:/sbin"]
+            self.process.environment = TailscaleCLI.environment
             for (index, pipe) in [(0, self.out), (1, self.err)] {
                 pipe.fileHandleForReading.readabilityHandler = { [weak job = self] handle in
                     guard let self = job else { return }

@@ -1,6 +1,51 @@
 # Tailscale / My Mac validation
 
-2026-09-30 KST. Source, build, local installation and release artifact verification record. Physical iPhone/iPad connection remains unverified. Paths under `build/` identify local evidence; those logs and screenshots are not shipped as release assets.
+Source, build, local installation and release artifact verification record, updated 2026-10-25 KST. The observed-setup patch is unreleased; the September installation/release observations refer to the earlier baseline. Physical iPhone/iPad connection remains unverified. Paths under `build/` identify local evidence; those logs and screenshots are not shipped as release assets.
+
+## Current status — 2026-10-25
+
+The full working-tree app, including this setup patch, was installed during the menu-bar work. See [menu-bar validation](MENU_BAR_VALIDATION.md) and `build/logs/menu-summary/shared-transition-install.log`. This installs RetroStats; it does not prove that the new Tailscale authorization/install flow has run successfully. General verification passed in `build/logs/verify-release-20261025-115917.8fd4A3`.
+
+Native authorization, privileged installation, extension/VPN approval, sign-in and physical-device E2E remain unverified for this patch. The September machine-state observations below are historical and have not been refreshed. No Tailscale reinstall, reboot or credential change was performed for this documentation update. No new release artifact was published.
+
+The staged Tailscale changes on top of the storage commit also passed `make verify` in an isolated export. [Commit verification log](../build/logs/tailscale-commit-verify-20261025.log). This includes injected setup regressions, not real administrator authorization or installation.
+
+## Historical observed-setup implementation — 2026-09-30 (unreleased)
+
+**Final `make verify`: PASS.** [Full log](../build/logs/verify-release-20260930-234943.WVQjl5), [driver output](../build/logs/tailscale-setup-final-20260930.log). Release build, existing regressions, new setup tests and bundle/signature/arm64 checks passed. The bundle remains **1.3.0 (8)**; this patch has not been installed, committed, pushed or released by the implementation session. [Source/bundle SHA-256 manifest](../build/tailscale-setup-final-snapshot-20260930.json) records the exact dirty checkout and all bundle files. The user's separate dirty icon files are outside this patch's ownership and were preserved in place.
+
+New meaningful regressions cover:
+
+- Exact vendor extension identity, enabled status versus stale onboarding, VPN-stage separation and pending removal before an app exists.
+- Installed-help configure gating, App Store/Standalone boundaries, `TAILSCALE_BE_CLI=1`, and `Unsupported` despite exit zero remaining pending.
+- Native authorization script and both shell layers **compiled/parsed only**, including punctuation in package paths. No authorization or package payload was executed.
+- macOS `lockf` contention and release on a **user temporary lock file**, with only sleep/echo commands: a competing payload cannot run. The privileged production lock/install remains unverified on the real machine.
+- Cancelled/denied authorization, eight rapid Resume calls producing one reconciliation and no additional prompt, persisted live/unknown authorization, restart recovery and no generic handoff success.
+- Finished/failed/interrupted jobs with an unconfirmed partial app cannot execute its CLI, advance to normal setup or silently replace it. Verified read-back resumes the existing client; a removed partial app offers one serialized retry.
+- Job clearing stops polling when Network/mobile/access are inactive. Setup fixture collectors, temporary packages and isolated preferences suites are cleaned.
+- Known regular vendor wrapper resolves to its app variant without execution; an orphan wrapper is ignored, while actual CLI binaries and custom launchers remain preserved.
+
+**Offscreen render:** [80 PNG / 4 HTML artifacts](../build/tailscale-setup-review-20260930/), including 16 new minimum-width light/dark stage captures; [full log](../build/logs/tailscale-setup-render-20260930.log). Authorization, installing, confirmation, extension, VPN, sign-in, attention and reboot surfaces retain the accepted dot graphics and short English copy. The host receives the dashboard palette and captures a settled frame after an offscreen warm-up. These are layout/content fixtures; they do not prove real native authorization, focus, VoiceOver, installation or device connection.
+
+Selected stage artifacts: [authorization dark](../build/tailscale-setup-review-20260930/tailscale-fixtures/setup-authorize-dark-minimum.png), [extension light](../build/tailscale-setup-review-20260930/tailscale-fixtures/setup-extension-light-minimum.png), [failed confirmation dark](../build/tailscale-setup-review-20260930/tailscale-fixtures/setup-failed-dark-minimum.png), [reboot light](../build/tailscale-setup-review-20260930/tailscale-fixtures/setup-reboot-light-minimum.png).
+
+The intermediate [232656.0QGFlP](../build/logs/verify-release-20260930-232656.0QGFlP) build succeeded but its basic-connect fixture failed: a Standalone extension prerequisite had been applied without an app path. The GUI-only boundary was corrected; the final run above preserves that regression and passes. Final warnings are the existing macOS Keychain deprecations and AppIntents metadata warning; the new concurrent-capture warning was removed.
+
+## Historical native evidence and outstanding validation
+
+The leader observed the earlier real **Tailscale 1.102.4** installation through Installer. [Bundle/signature/receipt record](../build/logs/tailscale-1.102.4-real-install-20260930.json). That observation predates this patch and does not prove its new authorized install path. The extension subsequently became enabled while the old onboarding UI still required approval. During removal, `configure mac-vpn uninstall` returned `Unsupported on this app variant` with exit zero; extension deactivation was only a submitted request. [Command output](../build/logs/tailscale-configure-uninstall-20260930.log).
+
+The September 30 leader handoff reported `/Applications/Tailscale.app`, `/Library/Tailscale` and `/usr/local/bin/tailscale` absent, an empty VPN service list, and the exact vendor extension still **terminated waiting to uninstall on reboot**. The trashed app remains; no Trash purge or reboot was performed by this session. The [21:31 audit](../build/logs/tailscale-uninstall-current-20260930.json) is older and must not be used to claim the wrapper remains. [Vendor user-state removal](../build/logs/tailscale-user-state-removal-20260930.json) is separately recorded. Backup copies were removed at the user's request; [audit](../build/logs/backups-removed-20260930.json). No new backups are part of this patch.
+
+Required independent native checks, owned by the leader:
+
+1. Run the exact built bundle and inspect **Restart Mac required** against the real pending-removal row. Verify it cannot download, prompt or install a duplicate. Preserve Keychain consent as an explicit user action if the saved hub blocks entry.
+2. After the user's chosen reboot, confirm removal is actually complete, then use RetroStats **Install connection app**. Observe one administrator prompt; cancellation/denial must remain retryable. Opening a window must not count as installed.
+3. Authorize installation once and verify root execution, installed bundle/Team/signature/receipt read-back and automatic progression. Try rapid resume/reentry and app restart without generating parallel prompts or cancelling an authorized package operation.
+4. Follow extension/VPN handoffs. Confirm actual extension/configuration/backend state, including the known stale onboarding and unsupported-command cases; no submitted request alone may advance the stage.
+5. Sign in and observe live connection plus hub readiness, then validate the same-account iPhone/iPad path and actual service use. Native keyboard/VoiceOver, Wi-Fi/cellular, sleep/wake and saved-link return remain separate checks.
+
+Fresh-state authorized installation, native OS permissions, account sign-in and physical device E2E remain **unverified**. No reboot or real networking/credential mutation was performed by the implementation session.
 
 ## Delivered source
 
@@ -8,12 +53,12 @@
 - `MacAccessCoordinator` owns the persistent hub, saved port/endpoint/account boundary, separate Keychain token, source identity, cancellation/generation and reconnect/wake/restart behavior. The 15-minute LAN setup session is independent. Explicit incoming allowance changes only `shields-up`; Disconnect/Log out pause automatic connection.
 - The exact Tailscale address is the persistent listener's binding. A token alone does not expose its service actions: the request source must identify a visible, same-owner, untagged iOS peer, or the user must resolve an owned ambiguous match on the Mac. Other/unknown sources receive the checking page. No arbitrary device is authorized.
 - `MacAccessProbe` checks configured ports only: SSH/VNC banners, SMB negotiate response and HTTP service response. Authentication/use remain separate. Only an explicitly selected localhost web service can be proxied, and its target/port/path/scope plus unrelated settings are verified before adding a shortcut.
-- `TailscaleInstaller` constrains index/package URLs and redirects to official HTTPS package hosts, requires trusted Tailscale installer signature/Team ID and Gatekeeper assessment, rechecks existing-client detection, and opens Installer. It does not approve installation or replace a detected distribution.
+- `TailscaleInstaller` constrains official HTTPS download sources, verifies the vendor signature/Gatekeeper assessment, then drives one-shot package installation after normal native administrator authorization. A root-owned package copy is rechecked against SHA-256/signature/Gatekeeper, root job markers/locking serialize execution, and installed bundle/receipt/signature determine completion. An existing distribution is preserved. OS extension/VPN consent and account sign-in remain separate observed stages.
 - English One Step instructions use actual RetroBitmapA and the design session's square dot matrices. No preview timer, simulated OS approval, mock QR or Tweak controls are used in production. Instructional cards do not prove installation/sign-in/permission; real HTTP requests determine path progress. Prepared services refresh automatically on the reusable hub.
 
 ## Build and self-tests
 
-**PASS:** `make verify` against the final **1.3.0 (8)** Swift source, [full log](../build/logs/verify-release-20260930-202145.sTzVC5). The earlier implementation verification is preserved at [193753.SyW9JT](../build/logs/verify-release-20260930-193753.SyW9JT).
+**Released baseline PASS:** `make verify` against the released **1.3.0 (8)** Swift source, [full log](../build/logs/verify-release-20260930-202145.sTzVC5). The earlier implementation verification is preserved at [193753.SyW9JT](../build/logs/verify-release-20260930-193753.SyW9JT). The current unreleased patch is recorded separately below.
 
 The check includes Release compilation, existing Swift regressions, bundle/signature/architecture checks and new Tailscale regressions:
 
@@ -67,7 +112,7 @@ Before local installation, the isolated `--show-tailscale-fixture` window was st
 
 ## Local installation and release artifact: 1.3.0 (8)
 
-- The original installed **1.2.1 (7)** bundle was backed up at `build/install-backups/20260930-195955/RetroStats.app`. The final build replaced `~/Applications/RetroStats.app` with its preferences and credentials preserved. [Installation log](../build/logs/install-retrostats-1.3.0-final-20260930-202335.log), [artifact and installation metadata](../build/releases/v1.3.0/install-final-metadata.json).
+- The earlier **1.2.1 (7)** backup and all other app/user-state backup copies were deleted at the user's request; they are no longer available. [Removal audit](../build/logs/backups-removed-20260930.json). No new backup was made by the setup implementation. The released baseline replaced `~/Applications/RetroStats.app` with its preferences and credentials preserved. [Installation log](../build/logs/install-retrostats-1.3.0-final-20260930-202335.log), [artifact and installation metadata](../build/releases/v1.3.0/install-final-metadata.json).
 - Source, installed and ZIP-extracted bundles match across all 8 regular files. Each passed strict code-signature verification. Version/build and bundle identity were checked; the installer Makefile now copies `build/RetroStats.app` rather than the stale `build/MiniStats.app` path.
 - Final production AppDelegate launch and native Overview/Network navigation were observed. [Installed Network screenshot](../build/logs/retrostats-1.3.0-installed-network.png), [accessibility snapshot](../build/logs/retrostats-1.3.0-installed-network-ax.txt). A saved link requiring new Keychain approval reports **LINK UNAVAILABLE** while the dashboard remains responsive. Continue setup is the explicit interactive recovery path. Keychain permissions were not granted by this verification.
 - The actual official `Tailscale-1.102.4-macos.pkg` was downloaded for diagnosis. Both `pkgutil --check-signature` and `spctl --assess --type install` exited 0; the leaf is `Developer ID Installer: Tailscale Inc. (W5364U7YZB)` and Gatekeeper reports accepted / Notarized Developer ID. [Signature output](../build/releases/v1.3.0/pkgutil-signature.log), [Gatekeeper output](../build/releases/v1.3.0/spctl-assessment.log). The parser now accepts the observed Apple distribution status while retaining the required Team ID and separate Gatekeeper assessment. The package was not installed during this verification.
