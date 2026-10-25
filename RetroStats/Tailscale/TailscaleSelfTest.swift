@@ -7,7 +7,7 @@ private func tsRequire(_ condition: @autoclosure () -> Bool, _ message: String) 
 }
 private func tsThrows(_ expected: TailscaleFailure, _ work: () async throws -> Void) async throws {
     do { try await work(); throw TailscaleFailure.invalid("Self-test: expected failure was missing") }
-    catch let failure as TailscaleFailure { try tsRequire(failure == expected, "Wrong typed failure") }
+    catch let failure as TailscaleFailure { try tsRequire(failure == expected, "Wrong typed failure: expected \(expected), received \(failure)") }
 }
 
 /// All setup command responses and native-surface openings are injected; no real installer,
@@ -440,6 +440,14 @@ private final class FixtureGuide: MobileGuideServing {
 }
 
 private func mobileGuideLoopbackSelfTest() async throws {
+    for invalidAddress in ["", "localhost", "0.0.0.0", "::", "0:0:0:0:0:0:0:0"] {
+        let rejected = MobileGuideServer()
+        var failed = false
+        do { try rejected.start(address: invalidAddress, token: "test", expires: .distantFuture, page: { _ in "" }, visited: { _ in }, ready: { _ in }, failed: {}) }
+        catch { failed = true }
+        rejected.stop()
+        try tsRequire(failed, "Wildcard and nonnumeric listener addresses rejected")
+    }
     let server = MobileGuideServer()
     defer { server.stop() }
     let token = "loopback-selftest-session"
@@ -454,7 +462,50 @@ private func mobileGuideLoopbackSelfTest() async throws {
     try tsRequire(response.contains("200 OK") && response.hasSuffix("loopback guide") && response.contains("script-src 'sha256-" + MacAccessPage.scriptHash + "'"), "Real loopback binding and HTTP response")
     let missing = try await guideRequest(port: port, path: "/not-a-session")
     try tsRequire(missing.contains("404 Not Found") && !missing.contains("loopback guide"), "Real server denies unrelated path")
-    print("PASS: guide server binds only requested loopback address and serves allowed read-only path")
+    // Reserve an available loopback port, then exercise the saved-port path.
+    let socketFD = socket(AF_INET, SOCK_STREAM, 0)
+    guard socketFD >= 0 else { throw TailscaleFailure.invalid("Port allocation failed") }
+    var address = sockaddr_in()
+    address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
+    address.sin_family = sa_family_t(AF_INET)
+    address.sin_addr.s_addr = inet_addr("127.0.0.1")
+    let bound = withUnsafePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(socketFD, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
+    }
+    var length = socklen_t(MemoryLayout<sockaddr_in>.size)
+    let named = withUnsafeMutablePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(socketFD, $0, &length) }
+    }
+    close(socketFD)
+    try tsRequire(bound == 0 && named == 0, "Allocate fixed loopback port")
+    let fixedPort = UInt16(bigEndian: address.sin_port)
+    let fixedServer = MobileGuideServer(port: fixedPort)
+    defer { fixedServer.stop() }
+    let actual: UInt16 = try await withCheckedThrowingContinuation { continuation in
+        let once = GuidePortContinuation(continuation)
+        do {
+            try fixedServer.start(address: "127.0.0.1", token: token, expires: Date().addingTimeInterval(4), page: { _ in "fixed-port guide" }, visited: { _ in }, ready: { once.finish(.success($0)) }, failed: { once.finish(.failure(TailscaleFailure.invalid("Fixed-port listener failed"))) })
+        } catch { once.finish(.failure(error)) }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) { once.finish(.failure(TailscaleFailure.timeout)) }
+    }
+    try tsRequire(actual == fixedPort, "Saved port must be preserved")
+    let duplicate = MobileGuideServer(port: fixedPort)
+    var collisionBlocked = false
+    do { try duplicate.start(address: "127.0.0.1", token: token, expires: .distantFuture, page: { _ in "wrong server" }, visited: { _ in }, ready: { _ in }, failed: {}) }
+    catch { collisionBlocked = true }
+    duplicate.stop()
+    try tsRequire(collisionBlocked, "Occupied saved port cannot silently move or share")
+    let fixedResponse = try await guideRequest(port: fixedPort, path: "/" + token)
+    try tsRequire(fixedResponse.contains("200 OK") && fixedResponse.hasSuffix("fixed-port guide"), "Fixed-port HTTP response")
+    let fixedMissing = try await guideRequest(port: fixedPort, path: "/not-a-session")
+    try tsRequire(fixedMissing.contains("404 Not Found") && !fixedMissing.contains("fixed-port guide"), "Fixed-port path protection")
+    fixedServer.stop()
+    let restarted = MobileGuideServer(port: fixedPort)
+    defer { restarted.stop() }
+    try restarted.start(address: "127.0.0.1", token: token, expires: .distantFuture, page: { _ in "restarted" }, visited: { _ in }, ready: { _ in }, failed: {})
+    let afterRestart = try await guideRequest(port: fixedPort, path: "/" + token)
+    try tsRequire(afterRestart.hasSuffix("restarted"), "Stop releases saved port before immediate restart")
+    print("PASS: guide server exact address, ephemeral/fixed-port HTTP, wildcard/collision rejection, path protection and immediate restart")
 }
 private final class GuidePortContinuation: @unchecked Sendable {
     let lock = NSLock()

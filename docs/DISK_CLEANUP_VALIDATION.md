@@ -84,3 +84,12 @@ Book/jevi 조율 세션의 허용 창에서 고유 bundle ID의 synthetic fixtur
 Library 저장 확인의 byte 크기가 로컬 PDF와 달라 저장된 동일 버전을 materialize하여 확인했다. PDF 직렬화 bytes는 다르지만 6쪽의 PDFKit 렌더 PNG가 모두 로컬 검증본과 동일했다. `gui-restored-access/library-roundtrip/visual-verification.json`, `library-delivery.json`에 근거를 보존했다. 이 저장본도 Library identity/version을 갖고 있다. 최신 설치 준비 상태는 `gui-restored-access/installation-preparation.json`이며 설치=false, GUI 반환=true, 마지막 수정 문구 actual=false다.
 
 설치하지 않았다. 현재 deploy-app.sh는 pgrep/pkill 후 설치 폴더를 교체하므로 실행하면 운영 앱 중단 조건을 위반한다. 설치 평가만 수행했으며 실행하지 않았다. 빌드 산출물은 `build/RetroStats.app`에 있고 GUI용 별도 식별자 사본은 `build/disk-cleanup-evidence/RetroStatsCleanupFixture.app`에 있다. 기존 설치 앱과 설정은 변경하지 않았다. 실제 사용자 캐시를 정리하거나 다른 앱을 종료하지 않았다. 참고 실제 정리 결과 파일 `/Volumes/eyedisk/MainDiskCleanupArchive/20261012T134954Z/정리결과.txt`는 읽기만 사용했다. 해당 결과의 36.54→41.96GiB/실측 5.42GiB와 관측 할당량 합계의 차이를 회귀 데이터에 반영했으며 이 구현의 확보 실적으로 주장하지 않는다.
+
+
+## 외장 복사 실제 파일시스템 검사 — 2026-10-25
+
+현재 빌드의 `--self-test`에 `RETROSTATS_ARCHIVE_TEST_DESTINATION`을 지정하여 실행했고 exit 0으로 통과했다. 목적지는 eyedisk의 새 `build/disk-cleanup-evidence/archive-validation-20261025.*` 디렉터리이며 원본은 테스트가 만든 `/tmp` 합성 home이다. 실제 사용자 캐시·DerivedData는 사용하지 않았다. [전체 로그](../build/logs/native-validation-20261025/archive-self-test.log), [정확한 목적지](../build/logs/native-validation-20261025/archive-destination.txt).
+
+운영 Controller의 선택 복사·영속 기록·원본 유지·복원 충돌 차단과 APFS 물리 저장소 분리 정책을 확인했다. Engine의 SHA256·ACL·확장 속성·권한 검증, 사본/원본 변경, 취소, 부분 commit 복구, 목적지 교체 검사도 통과했다. 기존 열린 FD와 변경 가능한 사본의 경쟁 조건을 재현하고 운영 원본 제거가 차단되는 것을 확인했다. 원본 제거 테스트는 합성 home에서만 허용한 fixture 경로다.
+
+`RETROSTATS_TEST_DETACH_ARCHIVE`는 지정하지 않았다. 실제 외장 볼륨 분리·재연결은 검사하지 않았고 eyedisk를 분리하지 않았다. 검사 결과는 GUI 선택·실제 사용자 데이터 작업의 검증을 대신하지 않는다.

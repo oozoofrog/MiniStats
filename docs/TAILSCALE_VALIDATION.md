@@ -154,3 +154,48 @@ Full failed logs are preserved; all causes below were corrected before the final
 | [Intermediate production launch sample](../build/logs/retrostats-1.3.0-final-launch-sample.txt) | Startup restored the saved link using a synchronous interactive Keychain read, blocking the dashboard. Restore/polling now fail closed without interaction and retain the existing record/token; the subsequent final installed build opened and navigated successfully |
 
 Early ImageRenderer-only native forms were empty; later shader-rendered offscreen form text overlapped. Those artifacts were superseded by NSHostingView capture plus direct bitmap form text drawing. Earlier render logs remain under `build/logs/tailscale-render*.log`; final artifacts are under `build/my-mac-review-20260930`.
+
+
+## Native validation — 2026-10-25
+
+Existing `/Applications/Tailscale.app` is version 1.104.2. Strict code-signature verification passed with bundle ID `io.tailscale.ipn.macsys` and Team `W5364U7YZB`. The package receipt exists but reports 1.102.4; it is historical, not proof of the new installer path. Evidence: `build/logs/native-validation-20261025/signature.txt`, `receipt.plist`.
+
+Live CLI reports Running, Self Online, an assigned address and no Health warnings. System VPN is Connected. Extension 1.104.2 is activated/enabled while 1.104.1 remains terminated waiting to uninstall on reboot. The existing installation was preserved; no uninstall, reinstall or reboot was performed. This does not validate fresh installation through RetroStats. All six registered peers were offline at the initial sample, including four same-owner iOS peers.
+
+The installed RetroStats executable matched the working-tree build. The real Network → Continue setup flow opened native Keychain authorization. After that dialog closed, My Mac displayed “Access link could not bind its saved address/port.” The requested service path therefore FAILS before a phone can load the hub. A BSD bind to the same live address/port succeeded. An isolated Swift reproduction of the production `NWListener(using: parameters, on: localPort)` with `requiredLocalEndpoint` set failed synchronously with POSIX EINVAL. See [listener reproduction](../build/logs/native-validation-20261025/listener-check.log). The same parameters with `NWListener(using: parameters)` constructed successfully; [comparison log](../build/logs/native-validation-20261025/listener-alternative.log). This comparison verifies construction only, not listening or remote access. No saved link or credentials were replaced.
+
+Physical-device HTTP access and service use remain unverified. This validation did not change source implementation, approve system dialogs, or publish a release. Raw status evidence is local only because it contains network/device identifiers.
+
+
+### Physical iPhone transport check — 2026-10-25
+
+After the user connected `iphone-14-pro-1`, the matching DNS peer reported iOS, Online and the same UserID as this Mac. Its CLI HostName was `localhost`, so matching used the DNS label supplied by the user. A one-packet `tailscale ping` to the peer completed with exit 0. Evidence: `build/logs/native-validation-20261025/status-iphone-connected.json` and `iphone-ping.log`. This proves peer transport reachability, not a successful HTTP hub load or service use. The RetroStats listener EINVAL blocker remains. The user reported no security prompt was open; no additional approval was requested.
+
+
+## Saved-port listener correction — 2026-10-25
+
+Added a real loopback regression for a nonzero saved port, checking the exact bound port, HTTP 200 response and wrong-path HTTP 404. The old implementation built successfully but the new regression failed with POSIX EINVAL: [RED log](../build/logs/verify-release-20261025-123348.TN3IT4).
+
+`requiredLocalEndpoint` now supplies both address and port, without also passing `on:` to `NWListener`. Full `make verify`, including ephemeral and fixed-port socket regressions, passed: [GREEN log](../build/logs/verify-release-20261025-123441.nbDhiZ). The corrected bundle was installed with the same designated requirement and byte-matched to the build: [installation log](../build/logs/native-validation-20261025/listener-fix-install.log).
+
+The installed GUI progressed to MAC READY and opened the device QR without regenerating the saved address or port. This confirms listener readiness, not physical-device HTTP completion. Direct host-to-own-Tailscale HTTP probing timed out; the application firewall reports RetroStats permitted and block-all disabled. Physical-device response is being verified separately.
+
+
+## Final bound-server correction and physical hub check — 2026-10-25
+
+Removing the duplicate NWListener port fixed construction, but was not sufficient: both the app and a separate minimal Network.framework listener still timed out on the Tailscale interface, while a BSD-bound temporary HTTP server delivered HTTP 200 to the actual iPhone. The host firewall reported both apps permitted. This is observed behavior on this macOS 27.0.1 host, not a general claim about Network.framework.
+
+The final `MobileGuideServer.swift` uses nonblocking BSD sockets bound to one explicit numeric IPv4/IPv6 address. It rejects wildcard/DNS addresses, preserves the saved port, and retains GET/token/expiry checks, 8192-byte request limit, eight-client limit, five-second deadlines, device identity filtering and response security headers. Partial output uses a write source. Shared-FD close waits for both read/write sources to finish cancellation. Transient ECONNABORTED does not stop the listener. Off-queue stop waits for FD closure before saved-port restart. No Tailscale policy, firewall setting, saved token or address was changed.
+
+Independent read-only review identified the transient accept-error and FD cancellation issues above; both were fixed and re-reviewed with no remaining concrete source findings. Full [make verify](../build/logs/verify-release-20261025-124831.9qM4dw) passed, including exact-address/fixed-port HTTP, wildcard and occupied-port rejection, wrong-path protection and immediate fixed-port restart. Earlier integration attempts exposed an IPv6 struct comparison compile error and a Swift exclusivity compile error, both corrected. A separate earlier run failed an existing CLI typed-failure expectation before the guide tests; the unchanged binary passed on rerun. The assertion now prints expected/actual failures, and the final full check passed.
+
+[Installation](../build/logs/native-validation-20261025/bound-server-install.log) passed the stable certificate requirement and installed bytes matched the built executable. The real Tailscale endpoint returned [HTTP 404](../build/logs/native-validation-20261025/live-bound-endpoint.txt) for an invalid link. The native LAN guide returned HTTP 200, and its persistent My Mac destination was presented as a QR to the user.
+
+The user confirmed that My Mac opened on `iphone-14-pro-1`. The installed app independently changed to “Device connection checked” and “localhost can reach My Mac.” The peer's DNS name is `iphone-14-pro-1` while its reported HostName is `localhost`. [Redacted native observation](../build/logs/native-validation-20261025/iphone-hub-observation.json). The selected device is the same-account iOS peer, not the Mac's own loopback request. A service click from that page is checked separately.
+
+
+### Physical service completion
+
+The user then opened Web from the actual My Mac page and confirmed the success page/code `RS-6427`. The temporary service independently logged HTTP 200 for `/` from the `iphone-14-pro-1` peer at 2026-10-25 03:51:58 UTC. This is separate from the earlier direct-service diagnostic at 03:40:30 UTC. The final peer snapshot and request log are local evidence at `build/logs/native-validation-20261025/status-final.json` and `web-requests.jsonl`. The actual flow verified is iPhone → RetroStats My Mac hub → configured HTTP service. SSH, SMB and VNC authentication/use were not tested because those services were not running.
+
+The user-authorized temporary Python service served only synthetic verification HTML, bound to the Mac's Tailscale IPv4 at port 8080. It was terminated after success and connection refusal confirmed closure. No sharing/VPN/firewall setting was changed, and no persistent web service was installed. The normal My Mac hub remains available while RetroStats runs; its Web action will become unavailable after the next service probe because the temporary service has ended. Fresh Tailscale installation, physical sleep/wake and Wi-Fi/cellular handoff remain separate unverified cases.

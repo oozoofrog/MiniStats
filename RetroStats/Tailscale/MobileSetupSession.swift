@@ -1,78 +1,11 @@
 import AppKit
 import Foundation
-import Network
 import CoreImage.CIFilterBuiltins
 import Darwin
 
 protocol MobileGuideServing: AnyObject {
     func start(address: String, token: String, expires: Date, page: @escaping (String) -> String, visited: @escaping (String) -> Void, ready: @escaping (UInt16) -> Void, failed: @escaping () -> Void) throws
     func stop()
-}
-
-final class MobileGuideServer: MobileGuideServing, @unchecked Sendable {
-    private var listener: NWListener?
-    private let port: UInt16
-    init(port: UInt16 = 0) { self.port = port }
-    private var connections: [UUID: NWConnection] = [:]
-    private let queue = DispatchQueue(label: "RetroStats.MobileGuide")
-    private var expiry: DispatchWorkItem?
-    static func allowedRequest(_ text: String, token: String, now: Date, expires: Date) -> Bool {
-        guard now < expires else { return false }
-        let first = text.components(separatedBy: "\r\n").first?.split(separator: " ") ?? []
-        return first.count == 3 && first[0] == "GET" && first[1] == "/" + token && first[2] == "HTTP/1.1"
-    }
-    func start(address: String, token: String, expires: Date, page: @escaping (String) -> String, visited: @escaping (String) -> Void, ready: @escaping (UInt16) -> Void, failed: @escaping () -> Void) throws {
-        guard listener == nil, !address.isEmpty else { throw TailscaleFailure.invalid("Guide address unavailable") }
-        let parameters = NWParameters.tcp
-        let localPort = port == 0 ? NWEndpoint.Port.any : NWEndpoint.Port(rawValue: port)!
-        parameters.requiredLocalEndpoint = .hostPort(host: NWEndpoint.Host(address), port: localPort)
-        let listener = try NWListener(using: parameters, on: localPort)
-        self.listener = listener
-        listener.stateUpdateHandler = { [weak listener] state in
-            switch state {
-            case .ready: if let port = listener?.port { ready(port.rawValue) }
-            case .failed: failed()
-            case .waiting: failed()
-            default: break
-            }
-        }
-        listener.newConnectionHandler = { [weak self] connection in
-            guard let self else { connection.cancel(); return }
-            guard self.connections.count < 8 else { connection.cancel(); return }
-            let id = UUID(); self.connections[id] = connection
-            connection.start(queue: self.queue)
-            let deadline = DispatchWorkItem { [weak self] in connection.cancel(); self?.connections[id] = nil }
-            self.queue.asyncAfter(deadline: .now() + 5, execute: deadline)
-            self.receive(connection, id: id, data: Data(), token: token, expires: expires, page: page, visited: visited, deadline: deadline)
-        }
-        listener.start(queue: queue)
-        let expiry = DispatchWorkItem { [weak self] in self?.stop() }
-        self.expiry = expiry
-        if expires != .distantFuture { queue.asyncAfter(deadline: .now() + max(0, expires.timeIntervalSinceNow), execute: expiry) }
-    }
-    private func receive(_ connection: NWConnection, id: UUID, data: Data, token: String, expires: Date, page: @escaping (String) -> String, visited: @escaping (String) -> Void, deadline: DispatchWorkItem) {
-        connection.receive(minimumIncompleteLength: 1, maximumLength: 8192) { [weak self] chunk, _, complete, error in
-            guard let self else { return }
-            var buffer = data; buffer.append(chunk ?? Data())
-            guard buffer.count <= 8192, error == nil else { connection.cancel(); self.connections[id] = nil; return }
-            let request = String(decoding: buffer, as: UTF8.self)
-            if !request.contains("\r\n\r\n"), !complete {
-                self.receive(connection, id: id, data: buffer, token: token, expires: expires, page: page, visited: visited, deadline: deadline); return
-            }
-            let allowed = Self.allowedRequest(request, token: token, now: Date(), expires: expires)
-            let remote: String
-            if case .hostPort(let host, _) = connection.endpoint { remote = host.debugDescription } else { remote = "" }
-            let body = allowed ? page(remote) : "Session unavailable"
-            if allowed { visited(remote) }
-            let status = allowed ? "200 OK" : "404 Not Found"
-            let header = "HTTP/1.1 \(status)\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: \(body.utf8.count)\r\nCache-Control: no-store\r\nReferrer-Policy: no-referrer\r\nX-Content-Type-Options: nosniff\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; font-src data:; script-src 'sha256-\(MacAccessPage.scriptHash)'; connect-src http:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'\r\nConnection: close\r\n\r\n"
-            connection.send(content: Data((header + body).utf8), completion: .contentProcessed { _ in
-                deadline.cancel(); connection.cancel(); self.connections[id] = nil
-            })
-        }
-    }
-    func stop() { queue.async { self.expiry?.cancel(); self.expiry = nil; self.listener?.cancel(); self.listener = nil; self.connections.values.forEach { $0.cancel() }; self.connections.removeAll() } }
-    deinit { listener?.cancel(); expiry?.cancel() }
 }
 
 enum SetupLanguage: String, CaseIterable { case ko = "한국어", en = "English"
