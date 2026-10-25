@@ -4,23 +4,21 @@ import SwiftUI
 struct DashboardView: View {
     @ObservedObject var model: DashboardModel
     var renderOnly = false
-    var toggleSize: (() -> Void)?
 
     var body: some View {
         GeometryReader { geometry in
-            DashboardContentView(model: model, renderOnly: renderOnly, toggleSize: toggleSize)
+            DashboardContentView(model: model, renderOnly: renderOnly)
                 .environment(\.retroCompact, geometry.size.width < RetroLayout.sidebarBreakpoint)
         }
         .frame(minWidth: RetroLayout.dashboardMinimum.width, minHeight: RetroLayout.dashboardMinimum.height)
-        .ignoresSafeArea(.container, edges: .top)
     }
 }
 
 /// One stable view identity owns selection at every width.
 struct DashboardContentView: View {
+    @Environment(\.openWindow) var openPermissionWindow
     @ObservedObject var model: DashboardModel
     var renderOnly = false
-    var toggleSize: (() -> Void)?
     @Environment(\.retroCompact) var compact
     @State var showsProcesses = false
     @State var selection: Set<String> = []
@@ -34,19 +32,7 @@ struct DashboardContentView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            RetroTitleBar(reservesWindowControls: !renderOnly)
-                .padding(.trailing, toggleSize == nil ? 0 : 32)
-                .overlay(alignment: .trailing) {
-                    if let toggleSize {
-                        Button(action: toggleSize) {
-                            Image(systemName: compact ? "arrow.up.left.and.arrow.down.right" : "arrow.down.right.and.arrow.up.left")
-                                .font(.system(size: 12)).frame(width: 32, height: 32)
-                        }
-                        .buttonStyle(.plain)
-                        .help(compact ? "Expand this window" : "Compact this window")
-                        .accessibilityLabel(compact ? "Expand this window" : "Compact this window")
-                    }
-                }
+            RetroTitleBar()
             if compact { compactNavigation }
             HStack(spacing: 0) {
                 if !compact {

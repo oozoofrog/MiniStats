@@ -56,11 +56,6 @@ import UniformTypeIdentifiers
         precondition(frontier.allSatisfy { abs($0 - size.height * 0.62) <= StorageBitFill.amplitude + 0.00001 })
         previousFrontier = frontier
     }
-    precondition(StatusReadout.shouldAnimate(storagePercent: 62, attached: true, reduceMotion: false))
-    precondition(!StatusReadout.shouldAnimate(storagePercent: 62, attached: true, reduceMotion: true))
-    precondition(!StatusReadout.shouldAnimate(storagePercent: 62, attached: false, reduceMotion: false))
-    precondition(!StatusReadout.shouldAnimate(storagePercent: 0, attached: true, reduceMotion: false))
-    precondition(!StatusReadout.shouldAnimate(storagePercent: 100, attached: true, reduceMotion: false))
     let samples: [(Double?, Double?)] = [(24, 68), (7, 43), (99, 99), (100, 100), (nil, nil)]
     for scale in [CGFloat(1), CGFloat(2)] {
         for (cpu, memory) in samples {
@@ -103,15 +98,11 @@ import UniformTypeIdentifiers
         }
     }
 
-    let view = StatusReadout(frame: CGRect(origin: .zero, size: size))
-    precondition(view.hitTest(CGPoint(x: 10, y: 10)) == nil, "Readout must let the status button receive clicks")
-    precondition(!view.isOpaque, "Menu bar background must show through the glyphs")
-
     if let path = ProcessInfo.processInfo.environment["RETROSTATS_STATUS_READOUT_OUTPUT"] {
         try renderStatusReadoutSamples(to: URL(fileURLWithPath: path))
     }
-    print("PASS: storage bits rise monotonically, stay in bounds, cover 0–100%, punch transparent CPU/Memory/PixelMax glyphs at 1x/2x, and preserve menu button hit testing")
-    print("PASS: 1pt ripple at 0.55pt / 5.5s / 30fps preserves coverage, fades its frontier without jumps, loops smoothly, keeps transparent glyphs, and stops for Reduce Motion, detached views, empty/full storage")
+    print("PASS: storage bits rise monotonically, stay in bounds, cover 0–100%, punch transparent CPU/Memory/PixelMax glyphs at 1x/2x")
+    print("PASS: 1pt ripple at 0.55pt / 5.5s / 30fps preserves coverage, fades its frontier without jumps, loops smoothly, keeps transparent glyphs")
 }
 
 private func fillArea(_ cells: [StorageBitFill.Cell]) -> CGFloat {

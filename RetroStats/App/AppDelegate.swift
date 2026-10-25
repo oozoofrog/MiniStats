@@ -3,11 +3,17 @@ import Darwin
 import ServiceManagement
 import SwiftUI
 
-final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
-    private let dashboard = DashboardModel()
-    private var dashboardWindow: NSWindow?
-    private let status = NSStatusBar.system.statusItem(withLength: 38)
-    private let readout = StatusReadout()
+/// System-service lifetime only. SwiftUI owns every production UI surface.
+final class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+    let dashboard: DashboardModel
+    private let fixture = CommandLine.arguments.contains("--menu-ui-fixture")
+
+    override init() {
+        dashboard = CommandLine.arguments.contains("--menu-ui-fixture")
+            ? MainActor.assumeIsolated { DashboardModel(tailscale: .preview()) } : DashboardModel()
+        super.init()
+    }
+    @Published private(set) var dashboardRequest: UUID?
     private var timer: Timer?
     private var storage: StorageController?
     private var previousCPU = cpuTicks()
@@ -15,30 +21,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var previousTime = ProcessInfo.processInfo.systemUptime
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        status.autosaveName = "RetroStats"
-        readout.setAccessibilityElement(false)
-        if let button = status.button {
-            readout.translatesAutoresizingMaskIntoConstraints = false
-            button.addSubview(readout)
-            NSLayoutConstraint.activate([
-                readout.leadingAnchor.constraint(equalTo: button.leadingAnchor),
-                readout.trailingAnchor.constraint(equalTo: button.trailingAnchor),
-                readout.topAnchor.constraint(equalTo: button.topAnchor),
-                readout.bottomAnchor.constraint(equalTo: button.bottomAnchor)
-            ])
-        }
-        status.button?.setAccessibilityLabel("RetroStats system monitor")
-        storage = StorageController(changed: { [weak self] in self?.updateStatusReadout() }, openMenu: { [weak self] in self?.showStorageMenu() })
+        diagnostic("Application services starting (fixture: \(fixture))")
+        storage = StorageController(changed: { [weak self] in self?.dashboard.objectWillChange.send() }, openMenu: { [weak self] in self?.requestDashboard(page: .storage) }, startServices: !fixture)
         dashboard.storage = storage
-        dashboard.tailscale.restoreAccess()
-        dashboard.toggleLogin = { [weak self] in self?.toggleLogin() }
+        if !fixture { dashboard.tailscale.restoreAccess() }
+        dashboard.toggleLogin = { [weak self] in
+            guard let self, !self.fixture else { return }
+            self.toggleLogin()
+        }
         dashboard.quit = { [weak self] in self?.quitApp() }
-        status.button?.target = self
-        status.button?.action = #selector(toggleDashboard)
-        installMainMenu()
-
-        updateStatusReadout()
-        if !UserDefaults.standard.bool(forKey: "loginConfigured") {
+        if !fixture && !UserDefaults.standard.bool(forKey: "loginConfigured") {
             do {
                 try SMAppService.mainApp.register()
                 UserDefaults.standard.set(true, forKey: "loginConfigured")
@@ -48,7 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         dashboard.updateIntervalChanged = { [weak self] interval in self?.scheduleRefresh(every: interval) }
         scheduleRefresh(every: dashboard.updateInterval)
         if CommandLine.arguments.contains("--show-dashboard") || CommandLine.arguments.contains("--show-storage") {
-            DispatchQueue.main.async { self.openDashboard(page: CommandLine.arguments.contains("--show-storage") ? .storage : .overview) }
+            DispatchQueue.main.async { self.requestDashboard(page: CommandLine.arguments.contains("--show-storage") ? .storage : .overview) }
         }
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(didWake), name: NSWorkspace.didWakeNotification, object: nil)
     }
@@ -72,104 +64,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         previousNetwork = currentNetwork
         previousTime = now
         dashboard.update(cpu: cpu, memory: memory, rates: rates)
-        updateStatusReadout()
-    }
-
-    private func updateStatusReadout() {
-        dashboard.objectWillChange.send()
-        readout.update(cpu: dashboard.cpu?.total, memory: dashboard.memory?.percent, storagePercent: storage?.disk?.percent)
-        let cpuLabel = dashboard.cpu.map { String(format: "CPU %.0f%%", $0.total) } ?? "CPU measuring…"
-        let memoryLabel = dashboard.memory.map { "Memory \(bytes($0.used)) / \(bytes(totalMemory))" } ?? "Memory read failed"
-        let diskLabel = storage?.disk?.description ?? "Storage read failed"
-        status.button?.toolTip = [cpuLabel, memoryLabel, "↓ \(dashboard.download)  ↑ \(dashboard.upload)", diskLabel].joined(separator: "\n")
-        status.button?.setAccessibilityValue([cpuLabel, memoryLabel, diskLabel].joined(separator: ", "))
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if CommandLine.arguments.contains("--show-storage") { showStorageMenu() }
-        else { openDashboard(page: dashboard.page) }
+        requestDashboard(page: dashboard.page)
         return true
     }
 
-    @objc private func toggleDashboard() {
-        if let window = dashboardWindow, window.isVisible && !window.isMiniaturized {
-            window.performClose(nil)
-        } else {
-            openDashboard(page: dashboard.page)
-        }
-    }
-
-    private func showStorageMenu() { openDashboard(page: .storage) }
-
-    private func openDashboard(page: DashboardPage) {
+    func requestDashboard(page: DashboardPage) {
+        diagnostic("Dashboard requested: \(page)")
         dashboard.page = page
-        if dashboardWindow == nil {
-            let window = NSWindow(contentRect: NSRect(origin: .zero, size: RetroLayout.compactSize),
-                                  styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
-                                  backing: .buffered, defer: false)
-            window.title = "RetroStats"
-            window.titleVisibility = .hidden
-            window.titlebarAppearsTransparent = true
-            window.isReleasedWhenClosed = false
-            window.contentMinSize = RetroLayout.dashboardMinimum
-            window.contentViewController = DashboardSurfaceController(model: dashboard, toggleSize: { [weak self] in self?.toggleDashboardSize() })
-            window.delegate = self
-            window.center()
-            if !window.setFrameUsingName("RetroStatsResponsiveDashboard"),
-               let button = status.button, let statusWindow = button.window {
-                let anchor = statusWindow.convertToScreen(button.convert(button.bounds, to: nil))
-                let screen = statusWindow.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? window.frame
-                let x = min(max(anchor.midX - window.frame.width / 2, screen.minX), screen.maxX - window.frame.width)
-                let y = max(screen.minY, anchor.minY - window.frame.height - 6)
-                window.setFrameOrigin(NSPoint(x: x, y: y))
-            }
-            window.setFrameAutosaveName("RetroStatsResponsiveDashboard")
-            dashboardWindow = window
-        }
-        dashboard.setPresented(true)
-        dashboard.refreshContext()
-        NSApp.activate(ignoringOtherApps: true)
-        dashboardWindow?.deminiaturize(nil)
-        dashboardWindow?.makeKeyAndOrderFront(nil)
-        storage?.checkDisk()
+        dashboardRequest = UUID()
     }
 
-    private func toggleDashboardSize() {
-        guard let window = dashboardWindow else { return }
-        let compact = (window.contentView?.bounds.width ?? 0) < RetroLayout.sidebarBreakpoint
-        let size = compact ? RetroLayout.dashboardSize : RetroLayout.compactSize
-        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: size))
-        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
-        if let screen = window.screen {
-            let visible = screen.visibleFrame
-            frame.size.width = min(frame.width, visible.width)
-            frame.size.height = min(frame.height, visible.height)
-            frame.origin.x = min(max(frame.minX, visible.minX), visible.maxX - frame.width)
-            frame.origin.y = min(max(frame.minY, visible.minY), visible.maxY - frame.height)
-        }
-        window.setFrame(frame, display: true, animate: !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion)
-    }
-
-    func windowWillClose(_ notification: Notification) {
-        guard let window = notification.object as? NSWindow, window === dashboardWindow else { return }
-        dashboard.setPresented(false)
-    }
-
-    private func installMainMenu() {
-        let menu = NSMenu()
-        let appItem = NSMenuItem()
-        let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "Quit RetroStats", action: #selector(quitApp), keyEquivalent: "q").target = self
-        appItem.submenu = appMenu
-        menu.addItem(appItem)
-        let windowItem = NSMenuItem()
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Close Window", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
-        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
-        windowItem.submenu = windowMenu
-        menu.addItem(windowItem)
-        NSApp.mainMenu = menu
-        NSApp.windowsMenu = windowMenu
+    func consumeDashboardRequest(_ request: UUID) {
+        if dashboardRequest == request { dashboardRequest = nil }
     }
 
     @objc private func didWake() {
@@ -191,10 +100,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func showError(_ error: Error) {
-        let alert = NSAlert()
-        alert.messageText = "Could not configure automatic launch"
-        alert.informativeText = error.localizedDescription
-        alert.runModal()
+        dashboard.loginError = error.localizedDescription
+        requestDashboard(page: .settings)
     }
 
     @objc private func quitApp() { NSApp.terminate(nil) }

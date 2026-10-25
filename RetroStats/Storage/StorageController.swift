@@ -3,6 +3,24 @@ import UserNotifications
 
 /// All state changes hop to the main queue, so captures from cleaner callbacks are safe.
 final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unchecked Sendable {
+    private(set) var notificationPermission: UNAuthorizationStatus?
+    private(set) var notificationAlertsEnabled = false
+    private(set) var permissionRequestRunning = false
+    private(set) var permissionError: String?
+    var notificationPermissionLabel: String {
+        Self.notificationPermissionLabel(notificationPermission, alertsEnabled: notificationAlertsEnabled)
+    }
+    static func notificationPermissionLabel(_ status: UNAuthorizationStatus?, alertsEnabled: Bool) -> String {
+        guard let status else { return "Not checked" }
+        switch status {
+        case .notDetermined: return "Not requested"
+        case .denied: return "Denied"
+        case .authorized: return alertsEnabled ? "Allowed" : "Allowed · alerts disabled"
+        case .provisional: return "Quiet delivery"
+        case .ephemeral: return "Temporary permission"
+        @unknown default: return "Unknown"
+        }
+    }
     private(set) var disk: DiskUsage?
     private(set) var cleaning = false
     private(set) var report: CacheReport?
@@ -22,6 +40,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     private var sendingNotification = false
     private let defaults = UserDefaults.standard
     private let support = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support/RetroStats")
+    private let servicesEnabled: Bool
     private let changed: () -> Void
     private let openMenu: () -> Void
     private let preview = CommandLine.arguments.contains("--preview-storage-warning")
@@ -31,6 +50,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
 
     init(changed: @escaping () -> Void, openMenu: @escaping () -> Void, startServices: Bool = true,
          autoCleanup: AutoCleanupController? = nil) {
+        self.servicesEnabled = startServices
         self.changed = changed
         self.openMenu = openMenu
         self.autoCleanup = autoCleanup ?? AutoCleanupController(
@@ -59,9 +79,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
         }
         let action = UNNotificationAction(identifier: "open-storage", title: "Storage Cleanup", options: .foreground)
         center.setNotificationCategories([UNNotificationCategory(identifier: "storage", actions: [action], intentIdentifiers: [], options: [])])
-        center.requestAuthorization(options: [.alert]) { _, _ in
-            DispatchQueue.main.async { self.checkDisk() }
-        }
+        refreshNotificationPermission()
         checkDisk()
         refresh()
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
@@ -77,6 +95,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
 
     func checkDisk() {
         disk = preview ? DiskUsage(total: 100_000_000_000, free: 45_000_000_000) : DiskUsage.read()
+        guard servicesEnabled else { changed(); return }
         if let disk {
             if !disk.warning {
                 if !preview { defaults.set(false, forKey: "storageAlertSent") }
@@ -123,6 +142,43 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
         DispatchQueue.main.async { self.openMenu() }
         completionHandler()
+    }
+
+    func refreshNotificationPermission() {
+        guard servicesEnabled else { return }
+        UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
+            DispatchQueue.main.async {
+                guard let self, !self.stopped else { return }
+                self.notificationPermission = settings.authorizationStatus
+                self.notificationAlertsEnabled = settings.alertSetting == .enabled
+                self.changed()
+            }
+        }
+    }
+
+    func requestNotificationPermission() {
+        guard servicesEnabled, !permissionRequestRunning else { return }
+        permissionRequestRunning = true
+        permissionError = nil
+        changed()
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { [weak self] _, error in
+            DispatchQueue.main.async {
+                guard let self else { return }
+                self.permissionRequestRunning = false
+                self.permissionError = error?.localizedDescription
+                self.refreshNotificationPermission()
+                self.checkDisk()
+                self.changed()
+            }
+        }
+    }
+
+    func openFullDiskAccessSettings() {
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_AllFiles")!)
+    }
+
+    func revealRunningApplication() {
+        NSWorkspace.shared.activateFileViewerSelecting([Bundle.main.bundleURL])
     }
 
     func openNotificationSettings() {

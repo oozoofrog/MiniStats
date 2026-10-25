@@ -21,7 +21,7 @@ make verify
 | `./build.sh` | 릴리스 빌드·서명·Swift 자체 검사 |
 | `make run` / `make install` | 빌드 후 `~/Applications`(또는 `DIR=`)에 복사, `run`은 실행까지 |
 
-Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 읽는 검사도 포함한다. 따라서 순수 단위 테스트만으로 구성된 명령이 아니며 macOS 실행 환경이 필요하다. DerivedData 검사는 임시 폴더만 삭제한다. 번들 검증은 ad-hoc 서명을 확인하며 notarization이나 배포 검증을 뜻하지 않는다.
+Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 읽는 검사도 포함한다. 따라서 순수 단위 테스트만으로 구성된 명령이 아니며 macOS 실행 환경이 필요하다. DerivedData 검사는 임시 폴더만 삭제한다. 번들 검증은 oozoofrog 팀(HY47J4787Q)의 Apple Development 인증서 서명과 고정 앱 식별 조건을 확인한다. notarization이나 Developer ID 배포 검증을 뜻하지 않는다.
 
 ## 파일 지도
 
@@ -29,12 +29,12 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | --- | --- |
 | CPU·메모리·네트워크·디스크·배터리 계산 | `RetroStats/Metrics/Metrics.swift`: `cpuLoad`, `memoryUsage`, `parseNetwork`, `networkRate`, `DiskUsage` |
 | 프로세스 샘플링·순위 | `RetroStats/Metrics/Processes.swift`: `processSamples`, `rankedProcesses`, `ProcessOrder` |
-| 메뉴바·자동 실행·진단 인수 | `RetroStats/App/AppDelegate.swift`: `AppDelegate`, `diagnostic`; `RetroStats/App/StatusReadout.swift`: `StatusReadout`, `StorageBitFill`, `statusReadoutImage`; `RetroStats/App/main.swift` |
-| 반응형 단일 창·메뉴바 열기/닫기 | `RetroStats/Dashboard/DashboardView.swift`, `DashboardSurfaceController.swift`; `AppDelegate.openDashboard`, `toggleDashboardSize` |
+| 메뉴바·자동 실행·진단 인수 | `RetroStats/App/AppDelegate.swift`: `AppDelegate`, `diagnostic`; `RetroStats/App/StatusReadout.swift`: `StorageBitFill`, `statusReadoutImage`; `RetroStats/App/main.swift` |
+| SwiftUI 메뉴바 요약·상세 창 | `RetroStats/App/RetroStatsApp.swift`: `MenuBarExtra`, `Window`, `MenuBarReadout`; `Dashboard/MenuSummaryView.swift`, `DashboardView.swift`; `AppDelegate.requestDashboard` |
 | 디스크 경고·알림·정리 진행 상태 | `RetroStats/Storage/StorageController.swift`: `StorageController`; `Storage/CacheReport.swift`: `CacheReport`, `CleanProgress` |
 | DerivedData 조회·삭제 보호 | `RetroStats/Storage/DerivedDataCleaner.swift`: `inspect`, `eligible`, `ensureIdle`, `clean` |
 | 예약 정리·제외·기록 | `RetroStats/Storage/AutoCleanupController.swift`: `tick`, `preview`, `confirmDeletion`; `Storage/AutoCleanup.swift`: `AutoCleanupEngine`, `AutoCleanupSettings`; `Dashboard/DashboardView+AutoCleanup.swift` |
-| 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `DashboardSurfaceController` |
+| 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `MenuSummaryView` |
 | 비트맵 글꼴·픽셀 컴포넌트·클래식 테마 | `RetroStats/PixelUI/`: `BitmapTextRenderer`, `RetroTheme.swift`, `PixelControls.swift`, `PixelIcons.swift`, `LCD.swift` |
 | 페이지 전환 | `RetroStats/Transition/`: `PageTransition`, `TransitionContainer` |
 | Swift 회귀 검사 (`--self-test`) | `Testing/SelfTest.swift`, `Testing/StatusReadoutSelfTest.swift`, `Storage/StorageSelfTest.swift`, `Storage/DerivedDataSelfTest.swift`, `Storage/AutoCleanupSelfTest.swift`, `Dashboard/DashboardSelfTest.swift`, `Transition/TransitionSelfTest.swift` |
@@ -44,7 +44,7 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 
 ## GUI와 설치 검증
 
-`RETROSTATS_STATUS_READOUT_OUTPUT="$PWD/build/logs/status-readout-native" make verify`로 메뉴바 네이티브 렌더러의 투명 PNG, 확대 비교 이미지와 수면 애니메이션 GIF를 추가 출력할 수 있다. 0·25·62·100% 스토리지를 비교하며, 앱 GUI·로그인 등록·알림 서비스를 시작하지 않는다. 실제 메뉴바의 배경·클릭·다중 디스플레이 검증은 별도다.
+`RETROSTATS_STATUS_READOUT_OUTPUT="$PWD/build/logs/status-readout-native" make verify`로 메뉴바 이미지 렌더러의 투명 PNG, 확대 비교 이미지와 기존 수면 수학 검사용 GIF를 추가 출력할 수 있다. 0·25·62·100% 스토리지를 비교하며, 앱 GUI·로그인 등록·알림 서비스를 시작하지 않는다. 실제 메뉴바의 배경·클릭·다중 디스플레이 검증은 별도다.
 
 앱을 직접 실행하기 전 기존 RetroStats를 메뉴에서 종료한다. 같은 번들 식별자의 앱이 실행 중이면 새 앱은 종료하므로, 실행 명령 성공만으로 새 빌드를 확인했다고 판단하지 않는다.
 
@@ -62,8 +62,8 @@ GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으�
 
 ## 대시보드 검증
 
-- 메뉴바 클릭 → 단일 창 → 상단 탐색 또는 사이드바의 독립 CPU/메모리 페이지 → 네트워크 → 스토리지 선택/선택 해제 → 설정을 확인한다. 실제 사용자 캐시는 삭제하지 않는다.
-- 처음에는 400×660 크기로 열리며, 창 우측 상단의 확대/축소 버튼이나 창 가장자리로 크기를 바꾼다. 폭 680pt에서 상단 탐색과 사이드바가 전환된다. 같은 호스팅 뷰를 유지하므로 페이지·스토리지 선택·측정 상태가 초기화되지 않아야 한다. 메뉴바 재클릭 또는 ⌘W로 닫으면 프로세스 샘플링을 중단한다. 창을 다른 앱 뒤로 보내도 자동으로 닫히지 않는다.
+- 메뉴바 클릭 → 요약 패널 → CPU/메모리/네트워크/스토리지 행 → 해당 상세 화면을 확인한다. 메뉴바 재클릭·Esc·바깥 클릭은 요약만 닫아야 한다. 상세 창이 열린 상태에서도 요약 닫기가 상세 수집을 중단하지 않아야 한다. 실제 사용자 캐시는 삭제하지 않는다.
+- 상세 창의 초기 크기는 840×760이며 시스템 창 컨트롤과 가장자리로 크기를 바꾼다. 폭 680pt에서 상단 탐색과 사이드바가 전환된다. 리사이즈와 요약 표시 중 페이지·측정 상태가 초기화되지 않아야 한다. 상세 창을 닫으면 프로세스 샘플링을 중단한다. 요약 패널만 열면 프로세스 수집은 시작하지 않는다. 설정은 패널과 ⌘,로 접근한다.
 - `--show-dashboard`와 `--show-storage`는 대시보드 창의 시작 화면을 지정한다.
 - `--render-dashboard <절대 출력 폴더>`는 실제 시스템 수치와 저장된 캐시 조회 결과로 밝은/어두운 모드에서 360pt·400pt·840pt 폭의 여섯 화면을 PNG 36개로 렌더링한다. 로그인 등록·알림 요청·캐시 조회·삭제는 실행하지 않는다. 상세 화면은 전체 내용을 확인할 수 있도록 긴 캔버스로 출력한다. SwiftUI 콘텐츠 배치 검사이며, 실제 창 타이틀바와 마우스 조작 검증을 대신하지 않는다. 추가 `tailscale-fixtures/`에는 CLI/API/server가 비활성인 상태·큰 글씨·긴 기기 이름·영어 fixture PNG와 설치/접속 허브 HTML을 저장한다. 네이티브 폼은 화면에 띄우지 않은 NSHostingView로 캡처한다.
 - `--bench-cleanup [항목 수]`(기본 100000)는 파일 시스템을 스텁으로 대체한 채 `clean` 루프(항목별 재검사·삭제 호출·이벤트 전달)만 시간을 잰다. 정리 로직 변경 전후 비교용이며 디스크를 건드리지 않는다.
@@ -85,3 +85,14 @@ GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으�
 - `MacAccessCoordinator`는 지속 허브의 주소/포트/계정 경계/Keychain token/자동 식별/서비스 준비를 관리한다. `MacAccessProbe`는 지정한 포트만 검사하며 SSH/VNC banner, SMB negotiate 응답, 웹 HTTP 응답을 서비스 인증 성공과 구분한다. `TailscaleInstaller`는 공식 HTTPS 호스트/패키지명/서명/Gatekeeper 검사를 거쳐 Installer만 연다.
 - Network 또는 15분 도우미 활성 시 3초 수집, 지속 접속만 활성 시 15초 수집, 모두 비활성 시 중단한다. 지속 허브는 Tailscale 주소/저장 포트에만 바인딩하고 15분 LAN 등록 안내와 독립적으로 종료·복원된다. 설치 안내와 허브는 영어이며 `MacAccessArt`의 디자인 도트 배열/기존 RetroBitmapA를 사용한다.
 - 전체 로그와 구현/fixture/오프스크린/브라우저/실기기 증거는 [TAILSCALE_VALIDATION.md](TAILSCALE_VALIDATION.md)에 구분한다. 개발 fixture는 실제 설정/설치/계정 변경을 대신하지 않는다.
+
+- `--render-menu-summary <절대 출력 폴더>`는 실제 수치와 unavailable 상태를 밝은/어두운 모드·일반/큰 글씨로 요약·행 대시보드 상태의 PNG 48개에 출력한다. 알림·로그인 등록·Tailscale 연결·삭제는 시작하지 않는다.
+- `--menu-ui-fixture`는 동일한 SwiftUI 앱 장면을 서비스 비활성 상태로 실행한다. 운영 앱을 종료하지 말고 bundle ID가 다른 검증 사본을 사용한다. CPU·메모리·디스크 읽기는 실제 값이며 Tailscale은 fixture다. 설치 및 실제 서비스 성공 근거로 사용하지 않는다.
+
+## 업데이트 시 권한 식별 유지
+
+`build.sh`와 Xcode의 Debug/Release는 `Apple Development: Kwanghoon Choi (QLB9PCEK9E)`를 사용한다. 키체인에 유효한 인증서와 개인 키가 없으면 빌드가 실패하며 ad-hoc 서명으로 대체하지 않는다. 현재 인증서는 2027-03-01 UTC에 만료된다. 갱신 시 설치본과 새 빌드의 designated requirement가 일치하는지 먼저 확인한다.
+
+`check-signature.sh`는 앱 ID `local.jay.RetroStats`, Apple 인증서 체인, 팀 `HY47J4787Q`와 cdhash 없는 designated requirement를 검증한다. `deploy-app.sh`는 실행 앱 종료 전에 입력 서명을 검사하고 기존 인증서 설치본과 designated requirement가 다르면 중단한다. 기존 ad-hoc 설치본만 최초 전환을 허용한다. 이번 최초 전환에서는 사용자가 권한을 다시 승인해야 할 수 있다. 이후에도 인증서 종류·앱 ID·designated requirement를 바꾸면 권한 재등록이 필요할 수 있다.
+
+서명 검증은 TCC 승인이나 모든 권한의 업데이트 유지에 대한 실제 검증을 대신하지 않는다. 권한 DB를 수정하거나 초기화하지 않는다.

@@ -19,6 +19,7 @@ final class DashboardModel: ObservableObject {
     @Published var sampled = false
     @Published var loginEnabled = false
     @Published var loginApproval = false
+    @Published var loginError: String?
     @Published private(set) var updateInterval: Double
     var updateIntervalChanged: ((Double) -> Void)?
     var updateIntervalLabel: String { String(format: "%.1f", updateInterval) }
@@ -58,6 +59,7 @@ final class DashboardModel: ObservableObject {
     private var previousTime: Double?
     private var generation = 0
     private var active = false
+    private var summaryPresented = false
     private var pendingGeneration: Int?
     private var lastAuxiliaryRefresh = -Double.infinity
 
@@ -72,6 +74,13 @@ final class DashboardModel: ObservableObject {
     func setPresented(_ visible: Bool) {
         guard active != visible else { return }
         if visible { begin() } else { end() }
+    }
+
+    /// Summary visibility never owns process collection or detail navigation.
+    func setSummaryPresented(_ visible: Bool) {
+        guard summaryPresented != visible else { return }
+        summaryPresented = visible
+        if visible { refreshContext() }
     }
 
     func resumeIfPresented() {
@@ -99,6 +108,7 @@ final class DashboardModel: ObservableObject {
         sampled = false
     }
     func refreshContext() {
+        storage?.refreshNotificationPermission()
         pressure = memoryPressureText()
         swap = swapText()
         load = loadAverageText()
@@ -118,13 +128,13 @@ final class DashboardModel: ObservableObject {
         upload = rates.map { speed($0.1) } ?? "—"
         if let cpu { cpuHistory = Array((cpuHistory + [cpu.total]).suffix(40)) }
         if let memory { memoryHistory = Array((memoryHistory + [memory.percent]).suffix(40)) }
-        if active {
+        if active || summaryPresented {
             pressure = memoryPressureText()
             swap = swapText()
             load = loadAverageText()
             // Login-service and battery queries need not run at the metric rate.
             if ProcessInfo.processInfo.systemUptime - lastAuxiliaryRefresh >= 3 { refreshAuxiliaryContext() }
-            sampleProcesses()
+            if active { sampleProcesses() }
         }
     }
     func sampleProcesses() {

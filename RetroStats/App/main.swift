@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 
 if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
     // Xcode previews: skip the single-instance guard so a stale preview agent
@@ -49,6 +50,8 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
         exit(1)
     }
     exit(0)
+} else if let index = CommandLine.arguments.firstIndex(of: "--render-menu-summary"), CommandLine.arguments.count > index + 1 {
+    try MainActor.assumeIsolated { try renderMenuSummary(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
 } else if let index = CommandLine.arguments.firstIndex(of: "--render-auto-cleanup"), CommandLine.arguments.count > index + 1 {
     try MainActor.assumeIsolated { try renderAutoCleanup(to: URL(fileURLWithPath: CommandLine.arguments[index + 1])) }
 } else if CommandLine.arguments.contains("--show-tailscale-fixture") {
@@ -58,10 +61,7 @@ if ProcessInfo.processInfo.environment["XCODE_RUNNING_FOR_PLAYGROUNDS"] == "1" {
 } else if CommandLine.arguments.contains("--notification-status") {
     printNotificationStatus()
 } else {
-    let app = NSApplication.shared
-    guard NSRunningApplication.runningApplications(withBundleIdentifier: appID).filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }).isEmpty else { exit(0) }
-    app.setActivationPolicy(.accessory)
-    let delegate = AppDelegate()
-    app.delegate = delegate
-    app.run()
+    let instanceID = Bundle.main.bundleIdentifier ?? appID
+    guard NSRunningApplication.runningApplications(withBundleIdentifier: instanceID).filter({ $0.processIdentifier != ProcessInfo.processInfo.processIdentifier }).isEmpty else { exit(0) }
+    RetroStatsApp.main()
 }

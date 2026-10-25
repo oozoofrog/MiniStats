@@ -43,6 +43,36 @@ extension DashboardContentView {
                                       options: TransitionSpeed.allCases.map { ($0, $0.label) },
                                       selection: $model.transitionSpeed)
             }
+            settingsGroup("PERMISSIONS") {
+                HStack {
+                    Text("Storage alerts")
+                    Spacer()
+                    Text(storage?.notificationPermissionLabel ?? "Unavailable").foregroundStyle(palette.muted)
+                }.font(.bitmap(11))
+                ViewThatFits(in: .horizontal) {
+                    HStack { notificationPermissionButtons }
+                    VStack(alignment: .leading) { notificationPermissionButtons }
+                }
+                if let error = storage?.permissionError {
+                    Text(error).font(.bitmap(11)).foregroundStyle(palette.muted)
+                }
+                RetroRule()
+                Text("App management").font(.bitmap(12))
+                Text("If macOS blocks an app update or removal, add RetroStats to App Management and enable it. Permission status must be checked in System Settings.")
+                    .font(.bitmap(11)).foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button("App Management…") { showPermissionGuide(.appManagement) }
+                    .font(.bitmap(11)).buttonStyle(.pixel)
+                RetroRule()
+                Text("File access").font(.bitmap(12))
+                Text("If a storage scan reports access denied, review Full Disk Access in System Settings. Drag the RetroStats icon beside System Settings into its app list, enable access, then restart RetroStats. Permission status must be checked in System Settings.")
+                    .font(.bitmap(11)).foregroundStyle(palette.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+                ViewThatFits(in: .horizontal) {
+                    HStack { filePermissionButtons }
+                    VStack(alignment: .leading) { filePermissionButtons }
+                }
+            }
             settingsGroup("GENERAL") {
                 Toggle("Launch at Login", isOn: Binding(get: { model.loginEnabled }, set: { _ in model.toggleLogin?(); model.refreshContext() }))
                     .toggleStyle(.pixelToggle)
@@ -65,6 +95,30 @@ extension DashboardContentView {
                 Button("Quit RetroStats") { model.quit?() }.buttonStyle(.pixel).disabled(storage?.cleaning == true || storage?.autoCleanup.running == true)
             }.font(.bitmap(11))
         }
+    }
+
+    private func showPermissionGuide(_ target: PermissionGuideTarget) {
+        UserDefaults.standard.set(target.rawValue, forKey: PermissionGuideTarget.preferenceKey)
+        openPermissionWindow(id: "permission-guide")
+        NSWorkspace.shared.open(target.settingsURL)
+    }
+
+    private var notificationPermissionButtons: some View {
+        Group {
+            Button("Request Permission") { storage?.requestNotificationPermission() }
+                .disabled(storage == nil || storage?.permissionRequestRunning == true || storage?.notificationPermission != .notDetermined)
+            Button("Notification Settings…") { storage?.openNotificationSettings() }
+            Button("Refresh") { storage?.refreshNotificationPermission() }
+        }.font(.bitmap(10)).buttonStyle(.pixel)
+    }
+
+    private var filePermissionButtons: some View {
+        Group {
+            Button("Full Disk Access…") {
+                showPermissionGuide(.fullDiskAccess)
+            }
+            Button("Show RetroStats in Finder") { storage?.revealRunningApplication() }
+        }.font(.bitmap(11)).buttonStyle(.pixel)
     }
 
     private var utilityButtons: some View {

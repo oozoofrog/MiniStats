@@ -16,13 +16,13 @@ set +e
     set -eu
     printf 'Mode: %s\n' "$mode"
     ./scripts/doctor.sh
-    /bin/sh -n build.sh scripts/doctor.sh scripts/verify.sh
+    /bin/sh -n build.sh scripts/doctor.sh scripts/verify.sh scripts/check-signature.sh scripts/deploy-app.sh
     ./build.sh "$@"
     test -s "$app/Contents/Resources/RetroBitmapA.ttf"
     test -s "$app/Contents/Resources/default.metallib"
     test "$app/Contents/Resources/default.metallib" -nt RetroStats/PixelUI/BitmapText.metal
     plutil -lint "$app/Contents/Info.plist"
-    codesign --verify --strict "$app"
+    ./scripts/check-signature.sh "$app"
     lipo -verify_arch arm64 "$app/Contents/MacOS/RetroStats"
     printf 'PASS: build, Swift self-tests, bundle/signature/architecture checks.\n'
 ) >"$log" 2>&1

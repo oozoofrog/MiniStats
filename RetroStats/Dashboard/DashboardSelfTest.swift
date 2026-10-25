@@ -62,10 +62,20 @@ func dashboardSelfTest() {
     model.end()
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
     precondition(model.processes.isEmpty, "Late process result resurrected closed dashboard")
+    model.page = .storage
+    model.setSummaryPresented(true)
+    model.update(cpu: nil, memory: nil, rates: nil)
+    RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
+    precondition(!model.sampled && model.processes.isEmpty, "Summary started detailed process collection")
+    precondition(model.page == .storage, "Summary changed the detail page")
+    model.setSummaryPresented(false)
     model.setPresented(true)
     let presentationDeadline = Date(timeIntervalSinceNow: 5)
     while !model.sampled && Date() < presentationDeadline { RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.02)) }
     precondition(model.sampled && model.processes.first?.memory == 20)
+    model.setSummaryPresented(true)
+    model.setSummaryPresented(false)
+    precondition(model.sampled && model.processes.first?.memory == 20, "Closing summary stopped the detail window")
     model.page = .network
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
     MainActor.assumeIsolated {
@@ -83,6 +93,7 @@ func dashboardSelfTest() {
     model.resumeIfPresented()
     RunLoop.current.run(until: Date(timeIntervalSinceNow: 0.1))
     precondition(model.processes.isEmpty && !model.sampled, "Wake restarted a hidden dashboard")
+    print("PASS: summary and detail collection lifetimes remain independent")
     print("PASS: single-surface presentation, navigation preservation, close and hidden-wake handling")
     print("PASS: dashboard async delivery and close/reopen cancellation, live background sampling")
     print("PASS: dashboard process PID identity, reuse/reset rejection, first-sample memory, finite intervals, multicore CPU, deterministic ranking")

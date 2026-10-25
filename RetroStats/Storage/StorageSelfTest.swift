@@ -2,6 +2,16 @@ import Foundation
 import UserNotifications
 
 func storageSelfTest() throws {
+    precondition(PermissionGuideTarget.fullDiskAccess.settingsURL.absoluteString.hasSuffix("?Privacy_AllFiles"))
+    precondition(PermissionGuideTarget.appManagement.settingsURL.absoluteString.hasSuffix("?Privacy_AppBundles"))
+    precondition(PermissionGuideTarget.appManagement.label == "App Management")
+    print("PASS: permission guide routes full disk access and app management separately")
+    precondition(StorageController.notificationPermissionLabel(nil, alertsEnabled: false) == "Not checked")
+    precondition(StorageController.notificationPermissionLabel(.notDetermined, alertsEnabled: false) == "Not requested")
+    precondition(StorageController.notificationPermissionLabel(.denied, alertsEnabled: false) == "Denied")
+    precondition(StorageController.notificationPermissionLabel(.authorized, alertsEnabled: false) == "Allowed · alerts disabled")
+    precondition(StorageController.notificationPermissionLabel(.authorized, alertsEnabled: true) == "Allowed")
+    print("PASS: notification permission distinguishes unqueried, unrequested, denied, authorized and disabled alerts")
     precondition(DiskUsage(total: 0, free: 0) == nil)
     precondition(DiskUsage(total: 100, free: 101) == nil)
     precondition(DiskUsage(total: 10000, free: 5001)?.warning == false)
