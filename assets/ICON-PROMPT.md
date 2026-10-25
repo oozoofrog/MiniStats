@@ -1,7 +1,26 @@
-# MiniStats app icon
+# RetroStats app icon
 
-Generated with the built-in `image_gen` tool. Final style: flat navy tile, turquoise statistics bars, white activity line, no glow or shadows. `AppIcon.png` is the transparent original. `build.sh` creates native macOS icon resolutions with `sips` and packages `AppIcon.icns` with `iconutil`.
+An ivory enclosure with a recessed olive LCD and four square-cell statistics
+meters. The colors follow the Ivory finish in `RetroStats/PixelUI/RetroTheme.swift`.
+A small status light and front-panel slot recall classic Macintosh hardware.
+The large screen and separated meters carry the silhouette at small sizes;
+there is no text or glow. Pixels outside the enclosure are transparent.
 
-## Final prompt
+## Regeneration
 
-Generate a NEW minimal FLAT VECTOR-STYLE macOS app icon on a TRANSPARENT BACKGROUND. Output an RGBA PNG with actual transparent pixels around the icon. One solid midnight navy rounded square, centered with 8% margin. Inside are three solid turquoise round-ended vertical statistic bars (middle tallest) and one bold white zigzag pulse line across them. Restrict to 3 solid colors: navy, turquoise, white. Geometrically simple shapes. Totally flat, no glow, no shadows, no gradient, no glass, no lighting, no texture, no bevel. No text. No checkerboard or background pattern. Clean silhouette, designed to stay readable as a tiny 32px application icon. Square 1024x1024 composition. The area beyond the rounded navy tile must be fully transparent.
+Run `xcrun swift scripts/generate-app-icon.swift` from the repository root to
+write the 1024×1024 sRGB RGBA master, `assets/AppIcon.png`. The Core Graphics
+generator is the editable artwork source and needs no external dependencies.
+
+`build.sh` uses `sips` to regenerate all ten native macOS PNG sizes in
+`RetroStats/Assets.xcassets/AppIcon.appiconset`. Xcode's asset compiler packages
+the app icon into the built bundle. `make verify` checks the release build,
+self-tests, bundle, signature, and architecture; it does not install the app.
+
+## Verification — 2026-10-25
+
+Regeneration in a temporary directory produced a byte-identical PNG.
+[Reproduction log](../build/logs/icon-commit-reproduction-20261025.log).
+The staged icon and preceding storage/Tailscale commits passed `make verify`
+in an isolated export. [Build log](../build/logs/icon-commit-verify-20261025.log).
+This verification did not reinstall the app or publish a release artifact.
