@@ -68,24 +68,40 @@ func transitionSelfTest() {
     let waveB = PixelTransition.waveFront(y: 280, progress: 0.5, width: rect.width, harmonics: PixelTransition.harmonics(seed: 42))
     precondition(waveA != waveB, "Different seeds must produce different wave fronts")
 
-    // Dither fade: every block belongs to exactly one page at each stage.
-    let ditherRect = CGRect(x: 0, y: 0, width: 32, height: 32)
-    var halfRevealed = 0
-    for row in 0..<4 {
-        for col in 0..<4 {
-            let point = CGPoint(x: CGFloat(col) * PixelFadeMask.cellSize + 4,
-                                y: CGFloat(row) * PixelFadeMask.cellSize + 4)
-            for p in [0.0, 0.5, 1.0] {
-                let newVisible = PixelFadeMask(animatableData: p).path(in: ditherRect).contains(point)
-                let oldVisible = PixelFadeMask(animatableData: p, inverted: true).path(in: ditherRect).contains(point)
-                precondition(newVisible != oldVisible, "Fade masks must be complementary at \(p)")
-                if p == 0 { precondition(!newVisible) }
-                if p == 1 { precondition(newVisible) }
-                if p == 0.5 && newVisible { halfRevealed += 1 }
+    // Blue-noise ranks cover the full tile exactly once. Seeds move the pattern,
+    // while each cell's blend remains monotonic throughout a transition.
+    let side = BlueNoiseDissolve.side
+    precondition(Set(BlueNoiseDissolve.ranks).count == side * side)
+    precondition(BlueNoiseDissolve.ranks.min() == 0)
+    precondition(Int(BlueNoiseDissolve.ranks.max()!) == side * side - 1)
+    var changed = 0
+    var softCells = 0
+    var halfCoverage = 0.0
+    for y in 0..<side {
+        for x in 0..<side {
+            let threshold = BlueNoiseDissolve.threshold(x: x, y: y, seed: 17)
+            precondition(threshold == BlueNoiseDissolve.threshold(x: x, y: y, seed: 17))
+            if threshold != BlueNoiseDissolve.threshold(x: x, y: y, seed: 42) { changed += 1 }
+            var previous = 0.0
+            for step in 0...20 {
+                let alpha = BlueNoiseDissolve.opacity(progress: Double(step) / 20, threshold: threshold)
+                precondition(alpha >= previous && alpha <= 1)
+                if step == 0 { precondition(alpha == 0) }
+                if step == 20 { precondition(alpha == 1) }
+                if step == 10 {
+                    halfCoverage += alpha
+                    if alpha > 0 && alpha < 1 { softCells += 1 }
+                }
+                previous = alpha
             }
         }
     }
-    precondition(halfRevealed == 8, "Half progress must reveal half the dither cells")
+    precondition(changed > side * side / 2)
+    precondition(softCells > side * side / 10, "Blend must have intermediate alpha, not binary dithering")
+    precondition(abs(halfCoverage / Double(side * side) - 0.5) < 0.001)
+    precondition(BlueNoiseDissolve.opacity(progress: -1, threshold: 0.5) == 0)
+    precondition(BlueNoiseDissolve.opacity(progress: 2, threshold: 0.5) == 1)
+    print("PASS: blue-noise rank coverage, seed variation, exact endpoints, monotonic smooth blending")
 
     // A flip tile contains two square faces around a horizontal hinge. The
     // old upper face folds down, then the new lower face opens downward.
@@ -158,7 +174,7 @@ func transitionSelfTest() {
     precondition(margin.contains(CGPoint(x: 1, y: 215)))
     precondition(!margin.contains(CGPoint(x: 155, y: 215)))
 
-    print("PASS: wave mask endpoints and seed variation, complementary dissolve and flip masks, seeded per-pixel timing")
+    print("PASS: wave mask endpoints and seed variation, complementary flip masks, seeded per-pixel timing")
 
     // Transition style selection: default is wave, every style round-trips
     // through UserDefaults, unknown values fall back, and each style produces a

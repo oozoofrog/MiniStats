@@ -21,6 +21,7 @@ struct DashboardContentView: View {
     var renderOnly = false
     @Environment(\.retroCompact) var compact
     @State var showsProcesses = false
+    @State var showsTransitionPreview = false
     @StateObject var explorer = StorageExplorerModel()
     @State var explorerRowLimit = 30
     @State var selection: Set<String> = []

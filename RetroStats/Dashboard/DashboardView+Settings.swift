@@ -47,6 +47,13 @@ extension DashboardContentView {
                 PixelSegmentedControl(title: "Transition Speed",
                                       options: TransitionSpeed.allCases.map { ($0, $0.label) },
                                       selection: $model.transitionSpeed)
+                Button("Preview") { showsTransitionPreview = true }
+                    .font(.bitmap(12))
+                    .buttonStyle(.pixel)
+                    .accessibilityLabel("Preview page transition")
+                    .popover(isPresented: $showsTransitionPreview) {
+                        TransitionSettingsPreview(style: model.transitionStyle, speed: model.transitionSpeed)
+                    }
             }
             settingsGroup("PERMISSIONS") {
                 HStack {

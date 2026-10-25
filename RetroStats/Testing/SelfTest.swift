@@ -56,7 +56,9 @@ private func requireEqual(_ a: BitmapMask, _ b: BitmapMask, _ message: String) {
                 for (character, advanceRatio) in samples {
                     func render(_ offset: CGFloat) -> NSBitmapImageRep {
                         let content = Text(String(repeating: character, count: 20))
-                            .font(.bitmap(size))
+                            // Mask regions and cell widths below use this exact point size.
+                            // User-selected text scaling must not change the test fixture.
+                            .font(.bitmap(size, scaled: false))
                             .foregroundStyle(style)
                             .textRenderer(BitmapTextRenderer())
                             .fixedSize()

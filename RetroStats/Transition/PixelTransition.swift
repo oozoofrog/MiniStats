@@ -163,50 +163,19 @@ struct WaveTransition: PageTransition {
 
 // MARK: - FadeTransition
 
-/// An 8-point Bayer dither replaces the old page one pixel block at a time.
-/// The two masks are complementary at every progress value.
-struct PixelFadeMask: Shape {
-    var animatableData: Double
-    var inverted = false
-
-    static let cellSize: CGFloat = 8
-    private static let order = [
-         0,  8,  2, 10,
-        12,  4, 14,  6,
-         3, 11,  1,  9,
-        15,  7, 13,  5
-    ]
-
-    func path(in rect: CGRect) -> Path {
-        var path = Path()
-        guard rect.width > 0, rect.height > 0 else { return path }
-        let threshold = max(0, min(1, animatableData)) * 16
-        let cols = Int(ceil(rect.width / Self.cellSize))
-        let rows = Int(ceil(rect.height / Self.cellSize))
-        for row in 0..<rows {
-            for col in 0..<cols {
-                let revealed = Double(Self.order[(row % 4) * 4 + col % 4]) < threshold
-                guard revealed != inverted else { continue }
-                path.addRect(CGRect(x: CGFloat(col) * Self.cellSize,
-                                    y: CGFloat(row) * Self.cellSize,
-                                    width: Self.cellSize, height: Self.cellSize))
-            }
-        }
-        return path
-    }
-}
-
 struct FadeTransition: PageTransition {
     var seed: Int
     var color: Color
     var duration: Double
 
     func newPageMask(progress: Double) -> AnyView {
-        AnyView(PixelFadeMask(animatableData: progress))
+        AnyView(BlueNoiseFadeMask(animatableData: progress, seed: seed))
     }
 
     func oldPageMask(progress: Double) -> AnyView {
-        AnyView(PixelFadeMask(animatableData: progress, inverted: true))
+        // Keep the old page opaque beneath the incoming alpha mask.
+        // Complementary translucent masks would leak the background under source-over.
+        AnyView(Rectangle())
     }
 
     func overlay(progress: Double, start: Date?) -> AnyView {

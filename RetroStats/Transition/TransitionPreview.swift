@@ -1,5 +1,6 @@
-#if DEBUG
 import SwiftUI
+
+#if DEBUG
 
 /// Transition-only preview. Replaces the real dashboard with lightweight sample
 /// pages so transitions can be inspected in Xcode previews without live metrics,
@@ -59,8 +60,54 @@ struct TransitionPreview: View {
     }
 }
 
+#endif
+
+/// Uses the production transition engine without changing dashboard navigation.
+struct TransitionSettingsPreview: View {
+    let style: TransitionStyle
+    let speed: TransitionSpeed
+    @State private var page: DashboardPage = .overview
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 12) {
+            TransitionContainer(
+                transition: style.makeTransition(color: .primary, duration: speed.duration),
+                currentPage: page
+            ) { PreviewSamplePage(page: $0, compact: true) }
+            .frame(width: 310, height: 300)
+            .clipped()
+
+            if reduceMotion {
+                Text("Reduce Motion is on. Preview switches without animation.")
+                    .font(.bitmap(11))
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            HStack {
+                Button("Replay") { page = page == .overview ? .settings : .overview }
+                    .accessibilityLabel("Replay page transition")
+                Spacer()
+                Button("Done") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .font(.bitmap(12))
+            .buttonStyle(.pixel)
+        }
+        .padding(16)
+        .frame(width: 342)
+        .background(Color(.windowBackgroundColor))
+        .task {
+            await Task.yield()
+            guard !Task.isCancelled else { return }
+            page = .settings
+        }
+    }
+}
+
 private struct PreviewSamplePage: View {
     let page: DashboardPage
+    var compact = false
 
     private var isA: Bool { page == .overview }
 
@@ -68,21 +115,23 @@ private struct PreviewSamplePage: View {
         ZStack {
             (isA ? Color(red: 0.96, green: 0.97, blue: 0.98) : Color(red: 0.10, green: 0.12, blue: 0.16))
                 .ignoresSafeArea()
-            VStack(spacing: 18) {
+            VStack(spacing: compact ? 12 : 18) {
                 Text(isA ? "PAGE A" : "PAGE B")
                     .font(.bitmap(34))
                     .foregroundStyle(isA ? .black : .white)
-                ForEach(0..<4, id: \.self) { row in
+                ForEach(0..<(compact ? 3 : 4), id: \.self) { row in
                     HStack(spacing: 12) {
                         ForEach(0..<3, id: \.self) { col in
                             RoundedRectangle(cornerRadius: 6, style: .continuous)
                                 .fill((isA ? Color.black : Color.white).opacity(0.12 + Double(row * 3 + col) * 0.05))
-                                .frame(height: 44)
+                                .frame(height: compact ? 32 : 44)
                         }
                     }
                 }
-                PixelSegmentedControl(title: "Sample mode", options: [(0, "One"), (1, "Two")],
-                                      selection: .constant(0))
+                if !compact {
+                    PixelSegmentedControl(title: "Sample mode", options: [(0, "One"), (1, "Two")],
+                                          selection: .constant(0))
+                }
                 Spacer()
                 Text(isA ? "이전 화면" : "다음 화면")
                     .font(.bitmap(13))
@@ -94,6 +143,7 @@ private struct PreviewSamplePage: View {
     }
 }
 
+#if DEBUG
 private struct TransitionPreviewControls: View {
     @Binding var style: TransitionStyle
     @Binding var speed: TransitionSpeed
