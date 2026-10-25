@@ -51,12 +51,15 @@ private final class ProcessJob: @unchecked Sendable {
                     guard let self = job else { return }
                     let data = handle.availableData
                     self.lock.lock()
+                    var exceeded = false
                     if data.isEmpty { self.eof.insert(index); handle.readabilityHandler = nil }
                     else if !self.finished {
-                        if self.stdout.count + self.stderr.count + data.count > self.limit { self.failure = TailscaleFailure.outputLimit }
+                        if self.stdout.count + self.stderr.count + data.count > self.limit {
+                            if self.failure == nil { self.failure = TailscaleFailure.outputLimit }
+                            exceeded = true
+                        }
                         else if index == 0 { self.stdout.append(data) } else { self.stderr.append(data) }
                     }
-                    let exceeded = self.failure != nil
                     let ready = self.exited && self.eof.count == 2
                     self.lock.unlock()
                     if exceeded { self.abort(TailscaleFailure.outputLimit) } else if ready { self.finishExit() }
@@ -89,18 +92,24 @@ private final class ProcessJob: @unchecked Sendable {
         if started { queue.async { self.abort(TailscaleFailure.cancelled) } }
     }
     private func abort(_ error: Error) {
-        lock.lock(); let done = finished; lock.unlock(); guard !done else { return }
+        lock.lock()
+        let done = finished
+        if !done && failure == nil { failure = error }
+        let firstFailure = failure ?? error
+        lock.unlock()
+        guard !done else { return }
+        // Publish failure before termination; its callback may run immediately.
         if process.isRunning {
             let pid = process.processIdentifier
             process.terminate()
             queue.asyncAfter(deadline: .now() + 0.2) { if self.process.isRunning { kill(pid, SIGKILL) } }
         }
-        complete(.failure(error))
+        complete(.failure(firstFailure))
     }
     private func finishExit() {
         lock.lock()
         let result = TailscaleCommandResult(stdout: stdout, stderr: stderr, status: process.terminationStatus)
-        let error = failure
+        let error = failure ?? (cancelled ? TailscaleFailure.cancelled : nil)
         lock.unlock()
         complete(error.map { .failure($0) } ?? .success(result))
     }

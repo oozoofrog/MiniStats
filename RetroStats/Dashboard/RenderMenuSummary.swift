@@ -12,14 +12,14 @@ import SwiftUI
     Thread.sleep(forTimeInterval: 0.2)
     for state in ["unavailable", "live"] {
         if state == "live" {
-            model.storage = StorageController(changed: {}, openMenu: {}, startServices: false)
+            model.storage = StorageController(changed: {}, openMenu: {}, startServices: false, volumeSnapshot: StorageVolumeCatalog.read())
             model.update(cpu: previous.flatMap { old in cpuTicks().flatMap { cpuLoad(old, $0) } }, memory: memoryUsage(), rates: nil)
         }
         for scale in [FontScale.normal, .large] {
             FontScale.current = scale
             for (scheme, name) in [(ColorScheme.light, "light"), (.dark, "dark")] {
                 for (page, suffix) in [(nil as DashboardPage?, "summary"), (.cpu, "cpu"), (.memory, "memory"), (.network, "network"), (.storage, "storage"), (.settings, "settings")] {
-                let renderer = ImageRenderer(content: MenuSummaryView(model: model, openDetail: { _ in }, selectedPage: page)
+                let renderer = ImageRenderer(content: MenuSummaryView(model: model, openDetail: { _ in }, renderOnly: true, selectedPage: page, showsVolumes: page == .storage)
                     .environment(\.colorScheme, scheme))
                 renderer.scale = 2
                 guard let cg = renderer.cgImage,

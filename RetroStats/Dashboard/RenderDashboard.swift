@@ -8,7 +8,7 @@ import SwiftUI
     app.setActivationPolicy(.accessory)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     let model = DashboardModel(tailscale: .preview())
-    model.storage = StorageController(changed: {}, openMenu: {}, startServices: false)
+    model.storage = StorageController(changed: {}, openMenu: {}, startServices: false, volumeSnapshot: StorageVolumeCatalog.read())
     let previousCPU = cpuTicks()
     let previousProcesses = processSamples()
     let previousNetwork = networkCounters()
@@ -26,8 +26,8 @@ import SwiftUI
             for (page, suffix) in [(DashboardPage.overview, "overview"), (.cpu, "cpu"), (.memory, "memory"), (.network, "network"), (.storage, "storage"), (.settings, "settings")] {
                 model.page = page
                 let height: CGFloat = width < RetroLayout.sidebarBreakpoint
-                    ? (page == .overview ? 760 : 1260)
-                    : (page == .overview || page == .network ? 860 : 1040)
+                    ? (page == .overview ? 1280 : page == .storage ? 2400 : 1600)
+                    : (page == .overview ? 1200 : page == .storage ? 2000 : page == .network ? 860 : 1400)
                 let content = DashboardView(model: model, renderOnly: true)
                     .frame(width: width, height: height)
                     .environment(\.colorScheme, scheme)

@@ -22,6 +22,13 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
         }
     }
     private(set) var disk: DiskUsage?
+    private(set) var volumes: [StorageVolume] = []
+    private(set) var refreshingVolumes = false
+    private(set) var volumesMeasuredAt: Date?
+    private let volumeQueue = DispatchQueue(label: "RetroStats.volumes", qos: .utility)
+    private var volumeGeneration = 0
+    private var volumeRefreshPending = false
+    private var mountObservers: [NSObjectProtocol] = []
     private(set) var cleaning = false
     private(set) var report: CacheReport?
     private var storageBusy = false
@@ -49,7 +56,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     private var notificationID: String { preview ? "storage-warning-preview" : "storage-warning" }
 
     init(changed: @escaping () -> Void, openMenu: @escaping () -> Void, startServices: Bool = true,
-         autoCleanup: AutoCleanupController? = nil) {
+         autoCleanup: AutoCleanupController? = nil, volumeSnapshot: [StorageVolume] = []) {
+        self.volumes = StorageVolumeCatalog.normalized(volumeSnapshot)
+        self.volumesMeasuredAt = volumeSnapshot.map(\.measuredAt).max()
         self.servicesEnabled = startServices
         self.changed = changed
         self.openMenu = openMenu
@@ -70,6 +79,18 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
             report = try? CacheReport.decode(data)
         }
         if !startServices { disk = DiskUsage.read(); return }
+        let workspaceCenter = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification, NSWorkspace.didRenameVolumeNotification] {
+            mountObservers.append(workspaceCenter.addObserver(forName: name, object: nil, queue: .main) { [weak self] note in
+                guard let self, !self.stopped else { return }
+                if name == NSWorkspace.didUnmountNotification,
+                   let url = note.userInfo?[NSWorkspace.volumeURLUserInfoKey] as? URL {
+                    self.volumes.removeAll { $0.path == url.path }
+                    self.changed()
+                }
+                self.refreshVolumes(invalidate: true)
+            })
+        }
         let center = UNUserNotificationCenter.current()
         center.delegate = self
         if !preview {
@@ -92,6 +113,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     }
 
     func checkDisk() {
+        if servicesEnabled { refreshVolumes() }
         disk = preview ? DiskUsage(total: 100_000_000_000, free: 45_000_000_000) : DiskUsage.read()
         guard servicesEnabled else { changed(); return }
         if let disk {
@@ -104,6 +126,35 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
             }
         }
         changed()
+    }
+
+    /// Refreshes only capacity/identity. It never enumerates user files or changes mounts.
+    func refreshVolumes(invalidate: Bool = false) {
+        guard !stopped else { return }
+        if invalidate { volumeGeneration += 1 }
+        if refreshingVolumes {
+            volumeRefreshPending = volumeRefreshPending || invalidate
+            return
+        }
+        refreshingVolumes = true
+        let generation = volumeGeneration
+        changed()
+        volumeQueue.async { [weak self] in
+            let snapshot = StorageVolumeCatalog.read()
+            DispatchQueue.main.async {
+                guard let self, !self.stopped else { return }
+                self.refreshingVolumes = false
+                if generation == self.volumeGeneration {
+                    self.volumes = snapshot
+                    self.volumesMeasuredAt = Date()
+                }
+                self.changed()
+                if self.volumeRefreshPending {
+                    self.volumeRefreshPending = false
+                    self.refreshVolumes()
+                }
+            }
+        }
     }
 
     private func sendWarning(_ disk: DiskUsage) {
@@ -349,6 +400,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
 
     func stop() {
         stopped = true
+        volumeGeneration += 1
+        mountObservers.forEach { NSWorkspace.shared.notificationCenter.removeObserver($0) }
+        mountObservers.removeAll()
         timer?.invalidate()
         task?.cancel()
         autoCleanup.stop()
@@ -372,6 +426,11 @@ extension StorageController {
         let controller = StorageController(changed: {}, openMenu: {}, startServices: false)
         controller.previewLocked = true
         controller.disk = disk
+        controller.volumes = disk.map { value in
+            [StorageVolume(id: "preview-main", name: value.name, path: "/", location: .internalDrive, isMain: true,
+                capacity: .init(total: Int64(clamping: value.total), free: Int64(clamping: value.free), available: value.available.map { Int64(clamping: $0) }),
+                sharedContainerID: nil, measuredAt: Date())]
+        } ?? []
         controller.report = report
         controller.storageBusy = busy
         controller.cleaning = cleaning

@@ -21,6 +21,8 @@ struct DashboardContentView: View {
     var renderOnly = false
     @Environment(\.retroCompact) var compact
     @State var showsProcesses = false
+    @StateObject var explorer = StorageExplorerModel()
+    @State var explorerRowLimit = 30
     @State var selection: Set<String> = []
     @Environment(\.colorScheme) private var scheme
 
@@ -58,6 +60,12 @@ struct DashboardContentView: View {
         .environment(\.retroPalette, palette)
         .tint(ink)
         .onChange(of: candidatePaths) { _, paths in selection.formIntersection(paths) }
+        .onChange(of: model.page) { _, page in if page != .storage { explorer.reset() } }
+        .onChange(of: model.selectedStorageVolumeID) { _, _ in explorer.reset() }
+        .onChange(of: displayedVolumes) { _, _ in explorer.reconcile(selectedVolume) }
+        .onChange(of: explorer.path) { _, _ in explorerRowLimit = 30 }
+        .onDisappear { explorer.reset() }
+        .onAppear { if !renderOnly { storage?.refreshVolumes() } }
     }
 
     private var compactNavigation: some View {

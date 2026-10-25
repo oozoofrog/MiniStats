@@ -4,23 +4,9 @@ import SwiftUI
 extension DashboardContentView {
     var storageDetails: some View {
         VStack(alignment: .leading, spacing: 14) {
-            if let disk = storage?.disk {
-                LCDScreen {
-                    VStack(alignment: .leading, spacing: 14) {
-                        RetroSectionHeading(title: disk.name.uppercased(), detail: bytes(disk.total))
-                        HStack(alignment: .firstTextBaseline) {
-                            LCDValue(text: bytes(disk.free)).font(.bitmap(32))
-                            Text("free").font(.bitmap(12)).foregroundStyle(palette.muted)
-                        }
-                        RetroDiskMap(percent: disk.percent)
-                        RetroSectionHeading(title: String(format: "%.1f%% USED", disk.percent), detail: "FREE SPACE")
-                    }
-                }
-                if let detail = disk.detail { Text(detail).font(.bitmap(11)).foregroundStyle(palette.muted) }
-                if disk.warning { attentionText("Storage is at or above the 50% alert threshold.") }
-            } else {
-                attentionText("Storage capacity could not be read.")
-            }
+            volumeCatalog
+            selectedVolumeDetails
+            RetroRule()
             autoCleanupSection
         }
     }
