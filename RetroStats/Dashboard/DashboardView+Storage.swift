@@ -22,49 +22,6 @@ extension DashboardContentView {
                 attentionText("Storage capacity could not be read.")
             }
             autoCleanupSection
-            RetroRule()
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("DerivedData").font(.bitmap(14))
-                    Text("Caches unused for more than 8 hours").font(.bitmap(11)).foregroundStyle(palette.muted)
-                }
-                Spacer()
-                if storage?.busy == true && storage?.cleaning == true { PixelHourglass(size: 14, color: ink) }
-                Button { storage?.refresh() } label: { PixelRefresh(size: 16, color: storage?.busy == true ? palette.muted : ink, animating: storage?.busy == true) }.buttonStyle(.pixel).disabled(storage?.busy == true).help("Check again").accessibilityLabel("Check DerivedData again")
-            }
-            if let progress = storage?.cleanProgress {
-                cleanProgressSection(progress)
-            } else {
-                if storage?.busy == true && storage?.autoCleanup.busy != true { Text(storage?.cleaning == true ? "Cleaning selected caches…" : (storage?.scanPath.map { "Checking: \(URL(fileURLWithPath: $0).lastPathComponent)" } ?? "Checking cache size…")).font(.bitmap(11)).foregroundStyle(palette.muted).lineLimit(1).truncationMode(.middle) }
-                if let error = storage?.lastError { attentionText(error) }
-                if let report = storage?.report {
-                    HStack {
-                        Text("\(report.candidates.count) candidates · \(bytes(UInt64(report.candidateBytes)))")
-                        Spacer()
-                        Button(selection.count == candidatePaths.count && !selection.isEmpty ? "Deselect All" : "Select All") {
-                            selection = selection.count == candidatePaths.count ? [] : Set(candidatePaths)
-                        }.buttonStyle(.pixelGhost).disabled(storage?.busy == true || candidatePaths.isEmpty)
-                    }.font(.bitmap(11))
-                    if report.candidates.isEmpty { Text("No old caches need cleanup right now.").font(.bitmap(11)).foregroundStyle(palette.muted).padding(.vertical, 8) }
-                    ForEach(report.candidates, id: \.path) { entry in
-                        HStack(spacing: 8) {
-                            Toggle(isOn: Binding(get: { selection.contains(entry.path) }, set: { if $0 { selection.insert(entry.path) } else { selection.remove(entry.path) } })) {
-                                VStack(alignment: .leading, spacing: 3) {
-                                    Text(URL(fileURLWithPath: entry.path).lastPathComponent).lineLimit(1).truncationMode(.middle).font(.bitmap(11))
-                                    Text(entry.workspace.isEmpty ? bytes(UInt64(entry.size)) : "\(entry.workspace) · \(bytes(UInt64(entry.size)))").font(.bitmap(11)).foregroundStyle(palette.muted)
-                                }
-                            }.toggleStyle(.pixelToggle).disabled(storage?.busy == true).help(entry.path)
-                            Spacer(minLength: 0)
-                            Button { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) } label: { Image(systemName: "folder") }
-                                .buttonStyle(.plain).help("Show in Finder").accessibilityLabel("\(URL(fileURLWithPath: entry.path).lastPathComponent) Show in Finder")
-                        }.padding(.vertical, 7)
-                        RetroRule()
-                    }
-                    Text("\(report.items.count) total caches · \(bytes(UInt64(report.totalBytes)))").font(.bitmap(11)).foregroundStyle(palette.muted)
-                    Text("Last checked \(englishDateTime(Date(timeIntervalSince1970: report.generatedAt)))")
-                        .font(.bitmap(11)).foregroundStyle(palette.muted)
-                }
-            }
         }
     }
     @ViewBuilder
@@ -168,34 +125,8 @@ extension DashboardContentView {
         }
     }
     var storageActionBar: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            if storage?.cleanProgress?.phase == .confirming {
-                Button { storage?.confirmCleanRun() } label: {
-                    Text("Run Deletion").frame(maxWidth: .infinity)
-                }.buttonStyle(.pixelPrimary)
-                Button { storage?.cancelClean() } label: {
-                    Text("Cancel").frame(maxWidth: .infinity)
-                }
-                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.bitmap(11)).foregroundStyle(palette.muted)
-            } else if storage?.cleanProgress?.phase == .running {
-                Button { storage?.cancelClean() } label: {
-                    Text("Cancel Cleanup").frame(maxWidth: .infinity)
-                }.buttonStyle(.pixelPrimary)
-                Text("Do not start a new build while cleanup is running. Cancelling only applies items processed so far.").font(.bitmap(11)).foregroundStyle(palette.muted)
-            } else if let phase = storage?.cleanProgress?.phase, phase == .done || phase == .cancelled || phase == .failed {
-                Button { storage?.dismissCleanProgress(); storage?.refresh() } label: {
-                    Text("Check Again").frame(maxWidth: .infinity)
-                }.buttonStyle(.pixelPrimary)
-            } else {
-                Toggle("Include Shared Caches", isOn: Binding(get: { storage?.includeShared == true }, set: { _ in selection = []; storage?.toggleShared() }))
-                    .toggleStyle(.pixelToggle).font(.bitmap(11)).disabled(storage?.busy == true)
-                Button { storage?.beginClean(paths: Set(selectedEntries.map(\.path))) } label: {
-                    Text("Review \(selectedEntries.count) selected · \(bytes(UInt64(selectedEntries.reduce(Int64(0)) { $0 + $1.size })))").frame(maxWidth: .infinity)
-                }.buttonStyle(.pixelPrimary).disabled(selectedEntries.isEmpty || storage?.busy == true || storage?.lastError != nil)
-                Text("Quit Xcode and xcodebuild before cleanup. Selected items are permanently deleted after confirmation.").font(.bitmap(11)).foregroundStyle(palette.muted)
-            }
-        }
-        .buttonStyle(.pixel)
+        Text("Recovery moves retain same-volume space. Verified external copies retain their original source. Source reclamation remains unavailable pending safety validation. Review measured changes per volume in history.")
+            .font(.bitmap(11)).foregroundStyle(palette.muted).fixedSize(horizontal: false, vertical: true)
     }
     /// Error text: ink, not red, with a 50% dither edge as the attention mark.
     func attentionText(_ text: String) -> some View {

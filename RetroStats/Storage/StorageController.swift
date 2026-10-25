@@ -65,7 +65,6 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
             guard let self, !self.stopped else { return }
             self.report = nil
             self.checkDisk()
-            self.refresh()
         }
         if let data = try? Data(contentsOf: support.appendingPathComponent("report.json")) {
             report = try? CacheReport.decode(data)
@@ -81,12 +80,11 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
         center.setNotificationCategories([UNNotificationCategory(identifier: "storage", actions: [action], intentIdentifiers: [], options: [])])
         refreshNotificationPermission()
         checkDisk()
-        refresh()
         let timer = Timer(timeInterval: 60, repeats: true) { [weak self] _ in
             guard let self else { return }
             self.checkDisk()
             self.autoCleanup.tick()
-            if Date().timeIntervalSince(self.lastScan) >= 3600 { self.refresh() }
+
         }
         timer.tolerance = 5
         RunLoop.main.add(timer, forMode: .common)
@@ -120,7 +118,7 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
                 }
                 let content = UNMutableNotificationContent()
                 content.title = self.preview ? "Test · Storage cleanup alert" : "Storage usage at or above 50%"
-                content.body = String(format: "Currently using %.1f%%. Open RetroStats' \"Storage Cleanup\" to review and remove old DerivedData.", disk.percent)
+                content.body = String(format: "Currently using %.1f%%. Open RetroStats' \"Storage Cleanup\" to review verified idle caches and recovery history.", disk.percent)
                 content.categoryIdentifier = "storage"
                 center.add(UNNotificationRequest(identifier: self.notificationID, content: content, trigger: nil)) { error in
                     DispatchQueue.main.async {
@@ -186,9 +184,13 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
     }
 
     func refresh() {
+        autoCleanup.preview()
+        return
+        /* Legacy reporting is retained only for test fixtures.
         guard !busy, !stopped else { return }
         lastScan = Date()
         run(clean: false)
+        */
     }
 
     func toggleShared() {
@@ -202,18 +204,9 @@ final class StorageController: NSObject, UNUserNotificationCenterDelegate, @unch
         NSWorkspace.shared.open(FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/Developer/Xcode/DerivedData"))
     }
 
-    func beginClean(paths: Set<String>) {
-        guard !busy, lastError == nil, let report, !paths.isEmpty else { return }
-        let entries = report.candidates.filter { paths.contains($0.path) }
-        guard Set(entries.map(\.path)) == paths else { return }
-        cleanProgress = CleanProgress(phase: .confirming, items: entries.map { CleanProgress.Item(path: $0.path, size: $0.size) })
-        changed()
-    }
-
-    func confirmCleanRun() {
-        guard let progress = cleanProgress, progress.phase == .confirming else { return }
-        run(clean: true, paths: progress.items.map(\.path))
-    }
+    // Compatibility entry points are inert. All product cleanup uses the recoverable engine.
+    func beginClean(paths: Set<String>) { }
+    func confirmCleanRun() { }
 
     func cancelClean() {
         if cleanProgress?.phase == .confirming {

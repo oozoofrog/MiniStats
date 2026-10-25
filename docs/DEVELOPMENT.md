@@ -33,8 +33,8 @@ Swift 자체 검사는 약 3초간 실제 CPU·메모리·네트워크 등을 �
 | SwiftUI 메뉴바 요약·상세 창 | `RetroStats/App/RetroStatsApp.swift`: `MenuBarExtra`, `Window`, `MenuBarReadout`; `Dashboard/MenuSummaryView.swift`, `DashboardView.swift`; `AppDelegate.requestDashboard` |
 | 디스크 경고·알림·정리 진행 상태 | `RetroStats/Storage/StorageController.swift`: `StorageController`; `Storage/CacheReport.swift`: `CacheReport`, `CleanProgress` |
 | DerivedData 조회·삭제 보호 | `RetroStats/Storage/DerivedDataCleaner.swift`: `inspect`, `eligible`, `ensureIdle`, `clean` |
-| 예약 정리·제외·기록 | `RetroStats/Storage/AutoCleanupController.swift`: `tick`, `preview`, `confirmDeletion`; `Storage/AutoCleanup.swift`: `AutoCleanupEngine`, `AutoCleanupSettings`; `Dashboard/DashboardView+AutoCleanup.swift` |
-| 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `MenuSummaryView` |
+| 예약 미리보기·복구 이동·제외·기록 | `RetroStats/Storage/AutoCleanupController.swift`: `tick`, `preview`, `confirmMove`, `restore`; `Storage/AutoCleanup.swift`: `AutoCleanupEngine`, `AutoCleanupSettings`; `Dashboard/DashboardView+AutoCleanup.swift` |
+| 대시보드·상위 프로세스·스토리지 선택 UI | `RetroStats/Dashboard/`: `DashboardModel`, `DashboardView`, `MenuSummaryView`, `DashboardSurfaceController` |
 | 비트맵 글꼴·픽셀 컴포넌트·클래식 테마 | `RetroStats/PixelUI/`: `BitmapTextRenderer`, `RetroTheme.swift`, `PixelControls.swift`, `PixelIcons.swift`, `LCD.swift` |
 | 페이지 전환 | `RetroStats/Transition/`: `PageTransition`, `TransitionContainer` |
 | Swift 회귀 검사 (`--self-test`) | `Testing/SelfTest.swift`, `Testing/StatusReadoutSelfTest.swift`, `Storage/StorageSelfTest.swift`, `Storage/DerivedDataSelfTest.swift`, `Storage/AutoCleanupSelfTest.swift`, `Dashboard/DashboardSelfTest.swift`, `Transition/TransitionSelfTest.swift` |
@@ -86,8 +86,14 @@ GUI 실행은 알림 권한 요청과 로그인 자동 실행 등록을 일으�
 - Network 또는 15분 도우미 활성 시 3초 수집, 지속 접속만 활성 시 15초 수집, 모두 비활성 시 중단한다. 지속 허브는 Tailscale 주소/저장 포트에만 바인딩하고 15분 LAN 등록 안내와 독립적으로 종료·복원된다. 설치 안내와 허브는 영어이며 `MacAccessArt`의 디자인 도트 배열/기존 RetroBitmapA를 사용한다.
 - 전체 로그와 구현/fixture/오프스크린/브라우저/실기기 증거는 [TAILSCALE_VALIDATION.md](TAILSCALE_VALIDATION.md)에 구분한다. 개발 fixture는 실제 설정/설치/계정 변경을 대신하지 않는다.
 
+- `--show-cleanup-fixture <eyedisk의 절대 폴더>`는 생산 UI/controller를 고유한 합성 home으로 실행한다. 운영 delegate·알림·로그인 등록은 시작하지 않는다. 설치본과 bundle ID가 겹치지 않는 검증 사본으로 실행하고 화면 사용을 조율한다. 합성 후보만 선택·이동·복원하며 증거는 출력 폴더에 보존한다.
+- `CleanupVolume.swift`는 statfs 실제 공간과 purgeable 추정을 분리한다. `AutoCleanupSelfTest.swift`의 회귀는 검사 후 변경, 마지막 경로/복구/복원 소스 교체, 취소 전후 commit, 부분 batch 실패, 재실행과 장기 복구 기록을 검증한다.
+
+- 외장 복구 프로토타입: `CleanupArchive.swift`, `CleanupArchiveSelfTest.swift`. 운영 `sourceReclaimEnabled`와 `fixtureArchiveRemoval`은 false가 기본이며 검증되지 않은 원본 제거를 차단한다. `RETROSTATS_ARCHIVE_TEST_DESTINATION`이 명시된 경우에만 고유한 /tmp 합성 home에서 다른 파일시스템으로 복사/복원 회귀를 수행한다. eyedisk의 `build/disk-cleanup-evidence/archive-external-fixture`를 사용할 수 있다. 운영 볼륨 분리 금지; 실제 분리 시험은 `RetroStatsArchiveFixture`라는 전용 disposable 이미지에서만 opt-in하며 마운트 실패는 검증 성공으로 처리하지 않는다.
+
 - `--render-menu-summary <절대 출력 폴더>`는 실제 수치와 unavailable 상태를 밝은/어두운 모드·일반/큰 글씨로 요약·행 대시보드 상태의 PNG 48개에 출력한다. 알림·로그인 등록·Tailscale 연결·삭제는 시작하지 않는다.
 - `--menu-ui-fixture`는 동일한 SwiftUI 앱 장면을 서비스 비활성 상태로 실행한다. 운영 앱을 종료하지 말고 bundle ID가 다른 검증 사본을 사용한다. CPU·메모리·디스크 읽기는 실제 값이며 Tailscale은 fixture다. 설치 및 실제 서비스 성공 근거로 사용하지 않는다.
+
 
 ## 업데이트 시 권한 식별 유지
 
